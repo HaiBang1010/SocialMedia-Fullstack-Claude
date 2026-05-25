@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s -o /dev/null -w \"register-bad: %{http_code}\\\\n\" -X POST http://localhost:3000/auth/register -H \"Content-Type: application/json\" -d '{\"username\":\"x\"}')",
+      "Bash(curl -s -X POST http://localhost:3000/auth/register -H \"Content-Type: application/json\" -d '{\"username\":\"x\"}')",
+      "Bash(curl -s http://localhost:3000/docs/json)",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\(0,'utf8'\\)\\);const p=d.paths['/auth/login'].post;console.log\\('register-200-ref:',JSON.stringify\\(d.paths['/auth/login'].post.responses['400'].content['application/json'].schema\\)\\);console.log\\('me-security:',JSON.stringify\\(d.paths['/auth/me'].get.security\\)\\);console.log\\('users-path-params:',JSON.stringify\\(d.paths['/users/{username}'].get.parameters\\)\\);console.log\\('server-url:',d.servers[0].url\\);\")"
+    ]
+  }
+}

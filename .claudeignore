@@ -1,0 +1,48 @@
+# Secrets — KHÔNG để Claude đọc
+.env
+.env.*
+**/secrets/
+**/credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Bự + Claude không cần đọc
+node_modules/
+dist/
+build/
+.next/
+.vite/
+coverage/
+*.log
+*.pid
+
+# Lock files — tốn token vô ích
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+prisma/migrations/*.db*
+
+# Build artifacts
+.cache/
+.parcel-cache/
+.turbo/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea/
+
+# Test/coverage
+.nyc_output/
+
+# Docker volumes (nếu mount local)
+postgres-data/
+redis-data/

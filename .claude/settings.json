@@ -61,5 +61,8 @@
       "Bash(sudo*)"
     ]
   },
-  "_note": "Read về cấu trúc settings.json: https://docs.claude.com/en/docs/claude-code/settings"
+  "_note": "Read về cấu trúc settings.json: https://docs.claude.com/en/docs/claude-code/settings",
+  "enabledPlugins": {
+    "understand-anything@understand-anything": true
+  }
 }

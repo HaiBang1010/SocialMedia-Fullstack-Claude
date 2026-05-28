@@ -28,7 +28,7 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 
 - TypeScript end-to-end, KHÔNG dùng JavaScript thô
 - Backend: Node.js 20+, Express, Prisma, PostgreSQL 16, JWT
-- Frontend: React 18, Vite, Tailwind, Zustand, TanStack Query
+- Frontend: React 18, Vite, Tailwind, Shadcn/ui, Zustand, TanStack Query
 - Package manager: npm (không Yarn/pnpm trừ khi user yêu cầu)
 
 ## Cross-cutting rules

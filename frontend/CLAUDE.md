@@ -1,12 +1,32 @@
 # Frontend — Project Memory
 
-> Frontend chưa được build. File này thiết lập rules SẼ áp dụng khi bắt đầu code.
+> Phase 1A (Foundation) đã build xong. File này là rules + setup thực tế.
+
+## Stack versions (pinned)
+
+> Pin cứng — KHÔNG để `create-vite` kéo bản mới hơn. Lý do: create-vite latest kéo React 19 + Vite 8 (rolldown) + TS 6, lệch stack đã chốt và Vite 8 vỡ trên Node < 22.12.
+
+- **React 18** (pinned — KHÔNG React 19)
+- **Vite 5** (esbuild, KHÔNG rolldown như Vite 8)
+- **TypeScript 5.6** (KHÔNG TS 6 — option như `erasableSyntaxOnly` không tồn tại ở 5.6)
+- **React Router 6** (KHÔNG v7)
+- **Tailwind CSS v4** (CSS-first — KHÔNG có `tailwind.config.js`)
+- **Node ≥ 22.12 khuyến nghị** — hiện chạy 22.1.0 với warning, Vite 5 vẫn chạy được
+
+## Tailwind v4 conventions
+
+- Theme config nằm trong `src/index.css` qua directive `@theme` — **KHÔNG có `tailwind.config.js`**
+- Plugin Vite: `@tailwindcss/vite` trong `vite.config.ts` (KHÔNG postcss config riêng)
+- CSS variables dùng color space **oklch** (zinc base), khai báo ở `:root` + `.dark`
+- `cn()` helper ở `src/lib/utils.ts` (clsx + tailwind-merge)
+- Khi thêm shadcn component: dùng bản **v4-compatible** (CLI `npx shadcn@latest add ...`)
+- Community shadcn components viết cho v3 cần adapt: `tailwind.config` → `@theme`, `hsl(...)` → `oklch(...)`
 
 ## Stack đã chốt
 
 - **Build tool**: Vite (KHÔNG Next.js, KHÔNG CRA)
 - **Framework**: React 18 + TypeScript
-- **Styling**: Tailwind CSS — utility-first
+- **Styling**: Tailwind CSS v4 (CSS-first) — Shadcn/ui — utility-first
 - **UI state**: Zustand (auth, UI, calls)
 - **Server state**: TanStack Query (KHÔNG dùng useEffect + fetch để query data)
 - **HTTP**: axios với interceptor để gắn JWT + auto-refresh
@@ -89,15 +109,17 @@ VITE_API_URL=http://localhost:3000
 
 (Vite require prefix `VITE_` cho env vars được expose ra client.)
 
-## Phase 1 deliverables (chưa build)
+## Phase 1A deliverables — DONE
 
-- [ ] Setup project: Vite + React + TS + Tailwind
-- [ ] Axios client + interceptor (auto refresh)
-- [ ] Zustand authStore
-- [ ] TanStack Query setup
-- [ ] React Router với protected routes
-- [ ] Trang `/login`
-- [ ] Trang `/register`
-- [ ] Trang `/` (home, hiện tên user)
-- [ ] Trang `/profile` (xem + sửa)
-- [ ] Logout button (clear store + redirect login)
+- [x] Setup project: Vite 5 + React 18 + TS 5.6 + Tailwind v4 + shadcn init (preset Nova)
+- [x] Axios client + interceptor (auto refresh, refresh singleton, circular guard)
+- [x] Zustand authStore (persist localStorage)
+- [x] TanStack Query setup (QueryClient + Provider + DevTools dev-only)
+- [x] React Router với ProtectedRoute + PublicOnlyRoute
+- [x] Trang `/login` (placeholder)
+- [x] Trang `/register` (placeholder)
+- [x] Trang `/` (home, hiện tên user + useQuery /auth/me smoke test)
+- [x] Trang `/profile` (placeholder)
+- [x] Logout button (clear store + redirect login)
+
+> **Phase 1A DONE.** Tiếp theo: **Phase 1B** — UI auth form thực (react-hook-form + Zod, login/register form, profile view/edit). Khi đó mới `npx shadcn@latest add` các component cần (Button, Input, Form...).

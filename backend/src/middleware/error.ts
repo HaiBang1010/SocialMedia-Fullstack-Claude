@@ -39,7 +39,7 @@ export const errorHandler: ErrorRequestHandler = (
       const fields = (err.meta?.target as string[]) || [];
       res.status(409).json({
         error: 'Conflict',
-        message: `${fields.join(', ')} đã tồn tại`,
+        message: `${fields.join(', ')} already exists`,
       });
       return;
     }
@@ -49,7 +49,7 @@ export const errorHandler: ErrorRequestHandler = (
   console.error('[Unhandled error]', err);
   res.status(500).json({
     error: 'InternalServerError',
-    message: 'Có lỗi xảy ra phía server',
+    message: 'Something went wrong on the server',
   });
 };
 
@@ -59,6 +59,6 @@ export const errorHandler: ErrorRequestHandler = (
 export function notFoundHandler(req: Request, res: Response): void {
   res.status(404).json({
     error: 'NotFound',
-    message: `Route ${req.method} ${req.url} không tồn tại`,
+    message: `Route ${req.method} ${req.url} not found`,
   });
 }

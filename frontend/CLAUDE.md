@@ -77,9 +77,10 @@ frontend/src/
 - Export default cho component chính, named export cho phụ
 - KHÔNG inline-style trừ trường hợp dynamic — dùng Tailwind classes
 
-### Tailwind
-- Custom theme trong `tailwind.config.js` cho colors/fonts của project
-- KHÔNG arbitrary values lung tung (`bg-[#abcdef]`) — define trong config nếu dùng nhiều lần
+### Tailwind (v4 CSS-first)
+- KHÔNG có `tailwind.config.js` — custom theme (colors/fonts) khai báo trong `src/index.css` qua `@theme`, color space oklch
+- Plugin build qua `@tailwindcss/vite` trong `vite.config.ts` (KHÔNG postcss config riêng)
+- KHÔNG arbitrary values lung tung (`bg-[#abcdef]`) — define trong `@theme` nếu dùng nhiều lần
 - Sort classes theo: layout → spacing → typography → colors → effects
 
 ### Forms

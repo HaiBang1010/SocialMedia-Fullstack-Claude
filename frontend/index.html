@@ -1,13 +1,30 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beng</title>
+  <!-- Set theme class before React mounts to avoid a flash of the wrong theme (FOUC). -->
+  <script>
+    (function () {
+      try {
+        var stored = JSON.parse(localStorage.getItem('theme'));
+        var theme = stored && stored.state && stored.state.theme;
+        if (!theme)
+          theme = matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+      } catch (e) { }
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

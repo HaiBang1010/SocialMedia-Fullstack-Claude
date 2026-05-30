@@ -55,12 +55,12 @@ export async function login(input: LoginInput) {
   if (!user) {
     // Lưu ý: KHÔNG nên tiết lộ "user không tồn tại" vs "sai password"
     // → giúp tránh user enumeration attack
-    throw new AppError(401, 'InvalidCredentials', 'Email/username hoặc password sai');
+    throw new AppError(401, 'InvalidCredentials', 'Invalid email/username or password');
   }
 
   const valid = await verifyPassword(input.password, user.passwordHash);
   if (!valid) {
-    throw new AppError(401, 'InvalidCredentials', 'Email/username hoặc password sai');
+    throw new AppError(401, 'InvalidCredentials', 'Invalid email/username or password');
   }
 
   const tokens = generateTokens(user);
@@ -74,7 +74,7 @@ export async function refresh(refreshToken: string) {
   try {
     payload = verifyRefreshToken(refreshToken);
   } catch {
-    throw new AppError(401, 'InvalidRefreshToken', 'Refresh token không hợp lệ hoặc hết hạn');
+    throw new AppError(401, 'InvalidRefreshToken', 'Invalid or expired refresh token');
   }
 
   // Đảm bảo user vẫn tồn tại (có thể đã bị xóa)
@@ -84,7 +84,7 @@ export async function refresh(refreshToken: string) {
   });
 
   if (!user) {
-    throw new AppError(401, 'UserNotFound', 'User không còn tồn tại');
+    throw new AppError(401, 'UserNotFound', 'User no longer exists');
   }
 
   // Cấp access token mới (không cấp refresh mới — pattern đơn giản)
@@ -100,7 +100,7 @@ export async function getCurrentUser(userId: string) {
   });
 
   if (!user) {
-    throw new AppError(404, 'UserNotFound', 'User không tồn tại');
+    throw new AppError(404, 'UserNotFound', 'User not found');
   }
 
   return user;

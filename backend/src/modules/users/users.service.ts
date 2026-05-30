@@ -19,7 +19,7 @@ export async function getUserByUsername(username: string) {
   });
 
   if (!user) {
-    throw new AppError(404, 'UserNotFound', 'Không tìm thấy user');
+    throw new AppError(404, 'UserNotFound', 'User not found');
   }
 
   return user;

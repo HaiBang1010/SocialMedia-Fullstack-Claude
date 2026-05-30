@@ -5,13 +5,15 @@
 
 ## Project identity
 
-Instagram-like social media platform, mục đích học full-stack. Solo dev, đang ở Phase 1.
+App name: Beng
+
+Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system); kế tiếp Phase 2 (posts).
 
 ## Cấu trúc
 
 ```
 social-media/
-├── frontend/      ← React + Vite (chưa build)
+├── frontend/      ← React + Vite (Phase 1A/1B/1C xong: foundation + auth UI + design system/layout)
 ├── backend/       ← Express + Prisma + PostgreSQL
 └── docs (README.md, ARCHITECTURE.md, WORKING_WITH_CLAUDE.md)
 ```
@@ -23,6 +25,9 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 - **Trao đổi tiếng Việt** với user — user nói tiếng Việt
 - **Comment code bằng tiếng Anh** 
 - **Error messages return cho user tiếng Anh** (HTTP responses, validation errors)
+- **UI labels của app** (buttons, nav, menu, placeholder, tooltip, headings): TIẾNG ANH
+- **Error messages return cho user** (HTTP responses, validation errors, toast): TIẾNG ANH
+- **User-generated content** (caption, bio, comment, post text): user nhập gì giữ nguyên đó
 
 ## Tech stack (immutable)
 
@@ -70,7 +75,10 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 
 | Phase | Status |
 |---|---|
-| 1. Auth + folder structure | Backend xong, frontend chưa |
+| 1. Backend auth + folder structure (+ Swagger) | ✅ Xong |
+| 1A. Frontend foundation (Vite/React/Tailwind/axios/Zustand/router) | ✅ Xong |
+| 1B. Frontend auth UI (login/register/profile form) | ✅ Xong |
+| 1C. Design system "Beng" + layout shell + dark mode | ✅ Xong |
 | 2-7 | Chưa bắt đầu |
 
 Khi bạn (Claude) thấy task ngoài phase hiện tại — hỏi user có muốn skip ahead không.

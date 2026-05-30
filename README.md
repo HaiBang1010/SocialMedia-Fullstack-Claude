@@ -45,7 +45,7 @@ social-media/
 │       ├── middleware/
 │       └── modules/
 │
-└── frontend/                   ← React app (CHƯA BUILD)
+└── frontend/                   ← React app (Phase 1C xong — auth UI + design system + layout)
     ├── CLAUDE.md
     └── README.md
 ```
@@ -66,11 +66,13 @@ npm run dev                 # → http://localhost:3000
                             # → http://localhost:3000/docs (Swagger UI)
 ```
 
-### Frontend (chưa build — Phase 1A tiếp theo)
+### Frontend (Phase 1C xong)
 
 ```bash
 cd frontend
-# sẽ init Vite + React + TS + Tailwind ở Phase 1A
+npm install
+npm run dev                 # → http://localhost:5173
+                            # cần backend chạy :3000 cùng lúc
 ```
 
 Đọc `backend/README.md` để setup chi tiết từng bước, đặc biệt nếu bạn mới với full-stack.
@@ -79,7 +81,10 @@ cd frontend
 
 | Phase | Nội dung | Trạng thái |
 |---|---|---|
-| 1 | Auth + folder structure | ✅ Backend xong (+ Swagger), frontend chưa |
+| 1 | Backend auth + folder structure (+ Swagger) | ✅ Xong |
+| 1A | Frontend foundation (Vite 5, React 18, axios, Zustand, router, Tailwind v4) | ✅ Xong |
+| 1B | Frontend UI auth (login/register form, profile) | ✅ Xong |
+| 1C | Design system "Beng" + layout shell + dark mode | ✅ Xong |
 | 2 | Posts core (đăng ảnh, feed, like, follow, comment) | ⏳ |
 | 3 | Posts nâng cao (carousel, video, reply, sticker) | ⏳ |
 | 4 | Stories (24h expire, archive, overlays) | ⏳ |
@@ -128,3 +133,9 @@ Project này thiết kế để dùng tốt với Claude Code:
 ## License
 
 Personal learning project. Không có license cụ thể.
+
+## Scope discipline
+
+- Khi task thuộc 1 phía (frontend/backend) mà phát hiện cần sửa phía kia → 
+  DỪNG, báo user, hỏi trước khi sửa. KHÔNG tự ý mở rộng scope dù lý do hợp lý.
+- Ngoại lệ: sửa lỗi typo/comment nhỏ thì OK, nhưng đổi logic/message hàng loạt phải hỏi.

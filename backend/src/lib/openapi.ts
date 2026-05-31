@@ -64,9 +64,11 @@ function registerAll() {
   // Lazy require to break circular import — these modules import schemas from this file.
   const { registerAuthOpenApi } = require('../modules/auth/auth.openapi');
   const { registerUsersOpenApi } = require('../modules/users/users.openapi');
+  const { registerMediaOpenApi } = require('../modules/media/media.openapi');
   const { registerHealthOpenApi } = require('./health.openapi');
   registerAuthOpenApi(registry);
   registerUsersOpenApi(registry);
+  registerMediaOpenApi(registry);
   registerHealthOpenApi(registry);
   registered = true;
 }
@@ -82,6 +84,6 @@ export function buildOpenApiDocument() {
       description: 'Instagram-like social media backend — auto-generated from Zod schemas.',
     },
     servers: [{ url: `http://localhost:${env.PORT}` }],
-    tags: [{ name: 'Auth' }, { name: 'Users' }, { name: 'Meta' }],
+    tags: [{ name: 'Auth' }, { name: 'Users' }, { name: 'Media' }, { name: 'Meta' }],
   });
 }

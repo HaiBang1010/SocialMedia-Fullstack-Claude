@@ -12,7 +12,8 @@
 |---|---|---|
 | Framework | React 18 + Vite | Fast dev, ecosystem |
 | Language | TypeScript | Type safety end-to-end |
-| Styling | Tailwind CSS | Shadcn/ui | Tốc độ + nhất quán |
+| Styling | Tailwind CSS v4 (CSS-first) + Shadcn/ui | Theme trong `src/index.css` qua `@theme` (KHÔNG `tailwind.config.js`); tokens oklch warm-neutral + coral "Beng" |
+| Fonts | Bricolage Grotesque (heading) + Plus Jakarta Sans (body) | Google Fonts; brand display + UI body |
 | UI state | Zustand | Nhẹ hơn Redux, đủ cho UI/auth/calls |
 | Server state | TanStack Query | Cache, refetch, optimistic updates miễn phí |
 | Routing | React Router v6 | Tiêu chuẩn |
@@ -51,26 +52,22 @@ frontend/
 ├── src/
 │   ├── main.tsx
 │   ├── App.tsx
-│   ├── api/
-│   │   ├── client.ts              # axios wrapper với auth interceptor
-│   │   ├── auth.ts
-│   │   ├── posts.ts
-│   │   └── ...
+│   ├── index.css                  # Tailwind v4 @theme + tokens (warm-neutral/coral "Beng") + .dark
+│   ├── api/                       # client.ts (axios interceptor), auth.ts, users.ts, ...
 │   ├── components/
-│   │   ├── ui/                    # Button, Modal, Avatar, Input
-│   │   ├── post/                  # PostCard, PostComposer, CommentTree
-│   │   ├── story/
-│   │   ├── chat/
-│   │   └── profile/
+│   │   ├── ui/                    # shadcn: Button, Input, Card, Form, Label
+│   │   ├── layout/                # AppLayout, Sidebar, RightRail, BottomNav, AuthLayout
+│   │   ├── ThemeToggle.tsx
+│   │   ├── ProtectedRoute.tsx, PublicOnlyRoute.tsx
+│   │   ├── post/  story/  chat/  profile/   # (Phase 2+)
 │   ├── features/                  # business logic theo feature
-│   ├── hooks/
-│   ├── stores/                    # Zustand stores
-│   ├── lib/                       # socket.ts, peer.ts, format.ts
-│   ├── pages/
-│   └── types/
-├── index.html
+│   ├── hooks/                     # useThemeEffect.ts (+ useSocket, useMediaUpload sau)
+│   ├── stores/                    # authStore.ts, themeStore.ts
+│   ├── lib/                       # utils.ts (cn), apiError.ts, validations/ (+ socket.ts, peer.ts sau)
+│   ├── pages/                     # LoginPage, RegisterPage, HomePage, ProfilePage
+│   └── types/                     # api.ts
+├── index.html                     # FOUC theme script (set .dark trước khi React mount)
 ├── vite.config.ts
-├── tailwind.config.js
 ├── tsconfig.json
 └── package.json
 ```
@@ -466,6 +463,14 @@ GET    /calls/turn-credentials
 
 ## 6. Key Technical Decisions
 
+### Feed algorithm (Phase 2)
+- Nguồn: posts của các User mà current user đang follow, trong N = 14 ngày gần đây.
+- Pagination: cursor = `(createdAt, id)` chronological (stable, không lệch khi có post mới chèn vào). Limit 20/page.
+- Shuffle **client-side** sau khi fetch page (KHÔNG `$queryRaw` + `ORDER BY RANDOM()`) → giữ Prisma type-safe, server nhẹ. Trade-off: reload thấy cùng 20 posts nhưng thứ tự khác — acceptable cho Phase 2.
+- Edge case: user follow 0 người → trả empty + gợi ý users to follow (RightRail "Suggested for you").
+- KHÔNG chronological thuần, KHÔNG AI personalization.
+- Phase polish: nếu cần stable order per session → move shuffle sang server-side (lưu seed vào cursor).
+
 ### Comments: recursive data, flat display
 - DB cho phép `parentId` chain vô hạn.
 - Frontend nhận tất cả comments của post, group bằng `parentId`.
@@ -498,6 +503,8 @@ GET    /calls/turn-credentials
 - Client xin presigned URL: `POST /media/presign`.
 - Client upload trực tiếp lên S3 → giảm tải backend.
 - Sau khi upload xong, client gửi reference URL.
+- **Phase 2**: chỉ single image. MIME whitelist `['image/jpeg', 'image/png', 'image/webp']`, max 5MB. Validate cả client (trước khi xin presign) lẫn server (khi cấp presign). Storage = MinIO local (Docker, S3-compatible).
+- **Phase 3**: mở rộng video + multi-file (carousel).
 - Video lớn → queue transcode (BullMQ) tạo nhiều resolution + thumbnail.
 
 ### API documentation: Zod-driven (Phase 1 đã có)
@@ -514,9 +521,10 @@ GET    /calls/turn-credentials
 | Phase | Tuần | Deliverables | Status |
 |---|---|---|---|
 | 1. Foundation | 1-2 | Auth, user CRUD, profile, Swagger | ✅ Backend done |
-| 1A Frontend | 1 | Vite setup, axios, Zustand, router | ⏳ Next |
-| 1B Frontend | 1 | Login/Register/Home/Profile UI | ⏳ |
-| 2. Posts core | 3-5 | Đăng ảnh đơn, feed, like, follow, comment phẳng | ⏳ |
+| 1A Frontend | 1 | Vite setup, axios, Zustand, router | ✅ Done |
+| 1B Frontend | 1 | Login/Register/Home/Profile UI | ✅ Done |
+| 1C Frontend | 2 | Design system "Beng" + layout shell + dark mode | ✅ Done |
+| 2. Posts core | 3-5 | Đăng ảnh ĐƠN (single image), feed (follow + random shuffle), like, follow, comment phẳng | ⏳ |
 | 3. Posts nâng cao | 6 | Carousel, video, reply, sticker/gif | ⏳ |
 | 4. Stories | 7-8 | Đăng story, viewer, expire, archive, overlays | ⏳ |
 | 5. Messaging | 9-12 | 1-1, group, reactions, recall, share | ⏳ |

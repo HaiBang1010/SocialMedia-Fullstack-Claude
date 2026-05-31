@@ -1,4 +1,6 @@
-# Social Media Platform
+# Beng — Social Media Platform
+
+*Moments worth keeping.*
 
 Instagram-like social network — feed, stories, messaging, calls. Build to learn full-stack.
 
@@ -85,7 +87,7 @@ npm run dev                 # → http://localhost:5173
 | 1A | Frontend foundation (Vite 5, React 18, axios, Zustand, router, Tailwind v4) | ✅ Xong |
 | 1B | Frontend UI auth (login/register form, profile) | ✅ Xong |
 | 1C | Design system "Beng" + layout shell + dark mode | ✅ Xong |
-| 2 | Posts core (đăng ảnh, feed, like, follow, comment) | ⏳ |
+| 2 | Posts core: đăng 1 ảnh, feed (follow+shuffle), like, follow, comment phẳng. Storage MinIO. | ⏳ |
 | 3 | Posts nâng cao (carousel, video, reply, sticker) | ⏳ |
 | 4 | Stories (24h expire, archive, overlays) | ⏳ |
 | 5 | Messaging (1-1, group, reactions, recall, share post) | ⏳ |

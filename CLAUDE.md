@@ -79,7 +79,8 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 | 1A. Frontend foundation (Vite/React/Tailwind/axios/Zustand/router) | ✅ Xong |
 | 1B. Frontend auth UI (login/register/profile form) | ✅ Xong |
 | 1C. Design system "Beng" + layout shell + dark mode | ✅ Xong |
-| 2-7 | Chưa bắt đầu |
+| 2. Posts core (1 ảnh đơn, feed follow+shuffle, like, follow, comment phẳng, MinIO storage) | Chưa bắt đầu |
+| 3-7 | Chưa bắt đầu |
 
 Khi bạn (Claude) thấy task ngoài phase hiện tại — hỏi user có muốn skip ahead không.
 

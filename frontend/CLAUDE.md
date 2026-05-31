@@ -1,6 +1,6 @@
 # Frontend — Project Memory
 
-> Phase 1A (Foundation) đã build xong. File này là rules + setup thực tế.
+> Phase 1A/1B/1C đã build xong (foundation + auth UI + design system "Beng" + layout shell + dark mode). Tiếp theo: Phase 2 (posts). File này là rules + setup thực tế.
 
 ## Stack versions (pinned)
 
@@ -17,7 +17,7 @@
 
 - Theme config nằm trong `src/index.css` qua directive `@theme` — **KHÔNG có `tailwind.config.js`**
 - Plugin Vite: `@tailwindcss/vite` trong `vite.config.ts` (KHÔNG postcss config riêng)
-- CSS variables dùng color space **oklch** (zinc base), khai báo ở `:root` + `.dark`
+- CSS variables dùng color space **oklch** (warm-neutral base + coral primary — theme "Beng"), khai báo ở `:root` + `.dark`
 - `cn()` helper ở `src/lib/utils.ts` (clsx + tailwind-merge)
 - Khi thêm shadcn component: dùng bản **v4-compatible** (CLI `npx shadcn@latest add ...`)
 - Community shadcn components viết cho v3 cần adapt: `tailwind.config` → `@theme`, `hsl(...)` → `oklch(...)`
@@ -110,17 +110,27 @@ VITE_API_URL=http://localhost:3000
 
 (Vite require prefix `VITE_` cho env vars được expose ra client.)
 
-## Phase 1A deliverables — DONE
+## Media upload pattern (Phase 2+)
 
-- [x] Setup project: Vite 5 + React 18 + TS 5.6 + Tailwind v4 + shadcn init (preset Nova)
+- Upload qua **presigned URL**: client gọi `POST /media/presign` lấy URL → `PUT` file lên URL đó qua axios (có progress tracking) → `POST /posts` với `publicUrl`.
+- KHÔNG upload file qua backend (backend chỉ cấp presign + nhận URL).
+- Validate **client-side** trước khi xin presign: MIME type (`image/jpeg`, `image/png`, `image/webp`), file size (max 5MB).
+
+## Phase 1A/1B/1C deliverables — DONE
+
+**Phase 1A — Foundation:**
+- [x] Vite 5 + React 18 + TS 5.6 + Tailwind v4 + shadcn init
 - [x] Axios client + interceptor (auto refresh, refresh singleton, circular guard)
-- [x] Zustand authStore (persist localStorage)
-- [x] TanStack Query setup (QueryClient + Provider + DevTools dev-only)
-- [x] React Router với ProtectedRoute + PublicOnlyRoute
-- [x] Trang `/login` (placeholder)
-- [x] Trang `/register` (placeholder)
-- [x] Trang `/` (home, hiện tên user + useQuery /auth/me smoke test)
-- [x] Trang `/profile` (placeholder)
-- [x] Logout button (clear store + redirect login)
+- [x] Zustand authStore (persist localStorage) + TanStack Query setup
+- [x] React Router + ProtectedRoute + PublicOnlyRoute + 4 page
 
-> **Phase 1A DONE.** Tiếp theo: **Phase 1B** — UI auth form thực (react-hook-form + Zod, login/register form, profile view/edit). Khi đó mới `npx shadcn@latest add` các component cần (Button, Input, Form...).
+**Phase 1B — Auth UI:**
+- [x] Login/Register form thực (react-hook-form + Zod, shadcn Card/Form/Input/Button)
+- [x] Profile view + edit (PATCH /users/me); error mapping 400 field errors + 409 conflict
+
+**Phase 1C — Design system "Beng" + layout + dark mode:**
+- [x] Override shadcn token → warm-neutral + coral; fonts Bricolage Grotesque + Plus Jakarta Sans
+- [x] Layout shell: AppLayout (Sidebar | main | RightRail + BottomNav), AuthLayout (split coral panel)
+- [x] Dark mode: themeStore + useThemeEffect + ThemeToggle + FOUC script
+
+> **Phase 1A/1B/1C DONE.** Tiếp theo: **Phase 2** — posts (model + API + feed thật, đăng ảnh, like, follow, comment).

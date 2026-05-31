@@ -3,6 +3,10 @@
 > Issue, tech debt, ideas — chưa làm nhưng không quên.
 > Quy ước: [scope] mô tả ngắn — lý do/context
 
+## Phase 2 — In progress (chưa bắt đầu)
+
+- [ ] [scope] Phase 2 chỉ đăng 1 ẢNH ĐƠN. Carousel multi-image đẩy về Phase 3.
+
 ## P1 — Sắp tới (làm trong phase hiện tại nếu có thời gian)
 
 (empty)
@@ -17,6 +21,16 @@
 ## P3 — Sau nữa (nice-to-have, có thể không làm)
 
 "switch sang openapi-typescript khi >15 endpoints"
+
+- [ ] [backend/media] Image transform (thumbnail, resize) — Phase 2 chỉ lưu original; thumbnail server-side hoặc on-the-fly cân nhắc Phase polish.
+- [ ] [backend/feed] Feed cải tiến — Phase 2 dùng follow+random simple. Personalized ranking, recency weight, engagement signals → Phase polish.
+- [ ] [backend/storage] Automate MinIO setup — viết script bash hoặc 
+      docker-compose init container chạy `mc alias set` + `mc mb` + 
+      `mc anonymous set download` tự động khi `docker compose up`. 
+      Hiện tại bucket + policy phải tạo tay sau mỗi lần `down -v`.
+- [ ] [backend/storage] Creds MinIO hardcode `minio`/`minio12345` trong 
+      docker-compose.yml (dev only). Phase polish: chuyển sang env var 
+      (`${MINIO_ROOT_USER}`...) + secret thật cho prod, không commit creds.
 
 ## DONE
 

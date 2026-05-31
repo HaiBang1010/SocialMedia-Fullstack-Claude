@@ -13,6 +13,16 @@
 - **Validation**: Zod
 - **Dev runner**: tsx (watch mode)
 
+## Storage
+
+- **Storage**: MinIO local (Docker), S3-compatible API
+- **Docker service**: `minio` trong `docker-compose.yml`, creds default `minio` / `minio12345` (DEV ONLY — Phase polish dùng env thật)
+- **Endpoint dev**: `http://localhost:9000` (API), `:9001` (console)
+- **Bucket**: `social-media-media` (tạo khi setup Phase 2)
+- **Access model**: bucket để **public-read** → đọc ảnh qua `S3_PUBLIC_URL` trực tiếp (không sign). **Upload** mới dùng presigned PUT. Private posts (`visibility=PRIVATE`) để Phase polish.
+- **Pattern**: presigned URL upload — client upload trực tiếp lên MinIO, backend KHÔNG nhận file body
+- **Library** (cài Phase 2): `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`
+
 ## Lệnh hay dùng
 
 ```bash
@@ -98,6 +108,7 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | POST | `/auth/logout` | - | placeholder |
 | GET | `/users/:username` | - | profile public |
 | PATCH | `/users/me` | ✓ | sửa profile |
+| POST | `/media/presign` | ✓ | xin presigned URL upload |
 
 Khi thêm endpoint mới, update bảng trên.
 
@@ -107,7 +118,7 @@ Khi thêm endpoint mới, update bảng trên.
 2. `npx prisma migrate dev --name <desc>`
 3. Tạo `src/modules/<feature>/` với 3 files (routes, service, schema)
 4. Register router vào `src/server.ts`: `app.use('/<feature>', <feature>Routes)`
-5. Tạo `src/modules/<feature>/<feature>.openapi.ts` (đăng ký paths + response schemas qua `OpenAPIRegistry`) và import vào `lib/openapi.ts` để Swagger UI tự cập nhật.
+5. Tạo `src/modules/<feature>/<feature>.openapi.ts` (đăng ký paths + response schemas qua `OpenAPIRegistry`). **BẮT BUỘC** wire vào `lib/openapi.ts`: thêm `require(...)` + gọi `registerXOpenApi(registry)` trong `registerAll()`, và thêm tag vào mảng `tags` của `buildOpenApiDocument()` — quên bước này thì Swagger KHÔNG thấy endpoint.
 6. Update bảng endpoints trong file này
 
 ## Anti-patterns backend

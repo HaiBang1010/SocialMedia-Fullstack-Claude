@@ -21,6 +21,12 @@
   Hiện tại: ai follow cũng instant approve (không có Follow.status enum). 
   Phase polish: thêm enum PENDING/ACCEPTED + endpoints accept/reject + 
   Notification tích hợp. Đây là feature IG thật có.
+- [P2] [frontend/feed] Cuộn xuống infinite scroll (useInfiniteQuery + 
+  IntersectionObserver, không phân trang button). Backend cursor pagination 
+  đã sẵn sàng — chỉ frontend implement.
+- [P2] [frontend/feed] "Reload sau idle ~5 phút" — quyết định cách 
+  (TanStack staleTime + refetchOnFocus / idle detection + banner / polling) 
+  khi tới Phase 2.4. IG-like behavior.
 
 ## P3 — Sau nữa (nice-to-have, có thể không làm)
 

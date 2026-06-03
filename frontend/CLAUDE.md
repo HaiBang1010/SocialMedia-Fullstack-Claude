@@ -112,9 +112,10 @@ VITE_API_URL=http://localhost:3000
 
 ## Media upload pattern (Phase 2+)
 
-- Upload qua **presigned URL**: client gọi `POST /media/presign` lấy URL → `PUT` file lên URL đó qua axios (có progress tracking) → `POST /posts` với `publicUrl`.
+- Upload qua **presigned URL**: client gọi `POST /media/presign` (body `{ contentType, size }`) → nhận `{ uploadUrl, publicUrl, objectKey, expiresIn }` → `PUT` file lên `uploadUrl` qua axios instance riêng (`api/upload-client.ts` — KHÔNG gắn JWT, KHÔNG refresh interceptor, có progress) → `POST /posts` với media `{ url: publicUrl, objectKey, width?, height? }`.
 - KHÔNG upload file qua backend (backend chỉ cấp presign + nhận URL).
-- Validate **client-side** trước khi xin presign: MIME type (`image/jpeg`, `image/png`, `image/webp`), file size (max 5MB).
+- **Backend contract** (`backend/.../media.schema.ts`): `contentType` ∈ {`image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/avif`} — **5 MIME**; `size` max **10MB**. (Note cũ ghi 3 MIME / 5MB là stale — đã sửa cho khớp wire.)
+- **Client-side validation**: giá trị thực thi chốt ở **Phase 2.4b** (create-post composer), CHƯA implement ở 2.4a (read-only). Có thể siết hẹp hơn backend (vd chỉ jpeg/png/webp + 5MB) như UX choice, miễn là **⊆ backend contract**.
 
 ## Phase 1A/1B/1C deliverables — DONE
 
@@ -133,4 +134,16 @@ VITE_API_URL=http://localhost:3000
 - [x] Layout shell: AppLayout (Sidebar | main | RightRail + BottomNav), AuthLayout (split coral panel)
 - [x] Dark mode: themeStore + useThemeEffect + ThemeToggle + FOUC script
 
-> **Phase 1A/1B/1C DONE.** Tiếp theo: **Phase 2** — posts (model + API + feed thật, đăng ảnh, like, follow, comment).
+> **Phase 1A/1B/1C DONE.**
+
+## Phase 2.4a — Data layer foundation (read-only) — DONE
+
+Backend-integration plumbing cho posts/feed/comments/likes/follows/media. **KHÔNG UI, KHÔNG mutation** (để 2.4b).
+
+- [x] `types/api.ts`: refactor `User extends PublicUser` (7-field base, zero-break — structural); thêm Phase 2 types: `Post`, `PostMedia`, `Comment`, `PublicUser`, enums `PostVisibility`/`MediaType`, list wrappers (`FeedResponse`/`PostListResponse`/`CommentListResponse`/`UserListResponse`), `LikeResponse`/`FollowResponse`, input types, `Presign{Request,Response}`.
+- [x] **Envelope rule**: Phase 2 posts/comments trả **BARE** (KHÔNG wrap `{ post }`/`{ comment }` như Phase 1 users `{ user }`). DELETE → 204 → `Promise<void>`. List → `{ <items>, nextCursor }`.
+- [x] `lib/queryKeys.ts`: factory tập trung (`feed/post/userPosts/comments/followers/following/user/me`), key hierarchical để 2.4b prefix-invalidate.
+- [x] `api/`: 6 thin client (`posts/feed/comments/likes/follows/media`, object-export như Phase 1) + `upload-client.ts` (axios riêng presigned PUT) + `index.ts` barrel (import qua `@/api`).
+- [x] `features/{feed,posts,comments}/hooks/`: read hooks `useFeed`/`useUserPosts`/`useComments` (`useInfiniteQuery`, cursor, `getNextPageParam: nextCursor ?? undefined`) + `usePost` (`useQuery`, `enabled` guard).
+
+> **Next 2.4b**: mutation hooks (`useLikePost`/`useFollow`/`useCreateComment`/`useCreatePost`…) + optimistic update + rollback (helper patch-post-across-caches) + UI (PostCard, FeedPage, Composer, profile grid). Giá trị client-side media validation chốt tại đây.

@@ -13,8 +13,8 @@ Instagram-like social network — feed, stories, messaging, calls. Build to lear
 | Database | PostgreSQL 16 + Prisma ORM |
 | Auth | JWT (access + refresh tokens) |
 | API docs | Swagger UI + OpenAPI 3.1 (schema-first từ Zod) |
+| Storage | S3-compatible (MinIO local) — presigned upload |
 | Real-time (sau này) | Socket.io + Redis |
-| Storage (sau này) | S3-compatible (MinIO local) |
 | Calls (sau này) | WebRTC + simple-peer + TURN server |
 
 ## Cấu trúc dự án
@@ -32,7 +32,7 @@ social-media/
 ├── .claudeignore               ← file Claude Code không đọc
 ├── .gitignore
 │
-├── backend/                    ← Express API (Phase 1 ĐÃ XONG)
+├── backend/                    ← Express API (Phase 2 backend ĐÃ XONG)
 │   ├── CLAUDE.md
 │   ├── README.md               ← setup chi tiết từng bước
 │   ├── docker-compose.yml
@@ -62,7 +62,7 @@ social-media/
 cd backend
 npm install
 cp .env.example .env       # đổi 2 JWT_SECRET trong file này
-docker compose up -d        # khởi Postgres
+docker compose up -d        # khởi Postgres + MinIO
 npx prisma migrate dev      # apply migration
 npm run dev                 # → http://localhost:3000
                             # → http://localhost:3000/docs (Swagger UI)
@@ -87,7 +87,8 @@ npm run dev                 # → http://localhost:5173
 | 1A | Frontend foundation (Vite 5, React 18, axios, Zustand, router, Tailwind v4) | ✅ Xong |
 | 1B | Frontend UI auth (login/register form, profile) | ✅ Xong |
 | 1C | Design system "Beng" + layout shell + dark mode | ✅ Xong |
-| 2 | Posts core: đăng 1 ảnh, feed (follow+shuffle), like, follow, comment phẳng. Storage MinIO. | ⏳ |
+| 2 (BE) | Posts core backend: posts CRUD, MinIO upload, follow, like, comment phẳng, feed API | ✅ Xong |
+| 2 (FE) | Posts core frontend: feed page, post card, create post, profile grid, like/comment/follow UI | ⏳ |
 | 3 | Posts nâng cao (carousel, video, reply, sticker) | ⏳ |
 | 4 | Stories (24h expire, archive, overlays) | ⏳ |
 | 5 | Messaging (1-1, group, reactions, recall, share post) | ⏳ |
@@ -96,20 +97,30 @@ npm run dev                 # → http://localhost:5173
 
 Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PROGRESS.md`.
 
-## API Endpoints hiện có (Phase 1)
+## API Endpoints hiện có (Phase 2 backend)
 
 | Method | Path | Auth | Mô tả |
 |---|---|---|---|
 | GET | `/health` | - | health check |
-| GET | `/docs` | - | Swagger UI (dev only) |
-| GET | `/docs/json` | - | OpenAPI 3.1 spec JSON |
-| POST | `/auth/register` | - | tạo user |
-| POST | `/auth/login` | - | login (email hoặc username) |
-| POST | `/auth/refresh` | - | xin access token mới |
+| GET | `/docs` · `/docs/json` | - | Swagger UI + OpenAPI 3.1 spec (dev only) |
+| POST | `/auth/register` · `/login` · `/refresh` | - | đăng ký / đăng nhập / refresh token |
 | GET | `/auth/me` | ✓ | user hiện tại |
-| POST | `/auth/logout` | - | placeholder |
 | GET | `/users/:username` | - | profile public |
 | PATCH | `/users/me` | ✓ | sửa profile |
+| GET | `/users/:username/posts` | optional | list post của user (cursor) |
+| POST · DELETE | `/users/:username/follow` | ✓ | follow / unfollow (idempotent) |
+| GET | `/users/:username/followers` · `/following` | optional | danh sách social (cursor) |
+| POST | `/media/presign` | ✓ | xin presigned URL upload (MinIO) |
+| POST | `/posts` | ✓ | tạo post (ảnh và/hoặc caption) |
+| GET | `/posts/:id` | optional | xem 1 post (visibility follow-aware) |
+| PATCH · DELETE | `/posts/:id` | ✓ | sửa / xóa post (owner) |
+| POST · DELETE | `/posts/:id/like` | ✓ | like / unlike (idempotent) |
+| POST | `/posts/:id/comments` | ✓ | thêm comment |
+| GET | `/posts/:id/comments` | optional | list comment (cursor) |
+| PATCH · DELETE | `/comments/:id` | ✓ | sửa / xóa comment (author / post owner) |
+| GET | `/feed` | ✓ | feed cá nhân hóa (following, 14 ngày, cursor) |
+
+> Mọi response trả post (single / list / feed) kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`. Chi tiết: `backend/CLAUDE.md` + Swagger `/docs`.
 
 ## Quy ước project
 

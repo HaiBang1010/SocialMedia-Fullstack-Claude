@@ -34,7 +34,7 @@
 | Real-time | Socket.io (sau này) | Rooms, namespaces, fallback transports |
 | Auth | JWT raw (jsonwebtoken) | Stateless, mobile-friendly, không cần Passport |
 | API Docs | Swagger UI + zod-to-openapi | Schema-first, 1 nguồn truth |
-| Storage | S3-compatible (sau này) | MinIO local, R2/S3 prod |
+| Storage | S3-compatible | MinIO local (active từ Phase 2), R2/S3 prod |
 | Validation | Zod | Share schema với frontend |
 
 ### DevOps (sau này)
@@ -524,7 +524,8 @@ GET    /calls/turn-credentials
 | 1A Frontend | 1 | Vite setup, axios, Zustand, router | ✅ Done |
 | 1B Frontend | 1 | Login/Register/Home/Profile UI | ✅ Done |
 | 1C Frontend | 2 | Design system "Beng" + layout shell + dark mode | ✅ Done |
-| 2. Posts core | 3-5 | Đăng ảnh ĐƠN (single image), feed (follow + random shuffle), like, follow, comment phẳng | ⏳ |
+| 2. Posts core (BE) | 3-5 | Posts CRUD, MinIO upload, follow, like, comment phẳng, feed API | ✅ Backend done |
+| 2. Posts core (FE) | 3-5 | Feed page, post card, create post, profile grid, like/comment/follow UI (shuffle client-side) | ⏳ |
 | 3. Posts nâng cao | 6 | Carousel, video, reply, sticker/gif | ⏳ |
 | 4. Stories | 7-8 | Đăng story, viewer, expire, archive, overlays | ⏳ |
 | 5. Messaging | 9-12 | 1-1, group, reactions, recall, share | ⏳ |

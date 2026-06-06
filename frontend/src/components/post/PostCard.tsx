@@ -3,7 +3,7 @@ import type { Post } from '@/types/api';
 import { formatRelativeTime } from '@/lib/format';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import Avatar from '@/components/common/Avatar';
-import PostMedia from './PostMedia';
+import PostCarousel from './PostCarousel';
 import PostActions from './PostActions';
 
 interface PostCardProps {
@@ -35,19 +35,28 @@ export default function PostCard({ post }: PostCardProps) {
         </Link>
       </header>
 
-      {post.media.length > 0 && (
-        <Link
-          to={detailTo}
-          state={detailState}
-          className="block"
-          aria-label="Open post"
-        >
-          <PostMedia
+      {post.media.length > 0 &&
+        // A single image stays a tap-to-open link (current behaviour). A
+        // carousel is NOT a link — swiping / arrow taps must not navigate; open
+        // detail via the comment icon instead.
+        (post.media.length === 1 ? (
+          <Link
+            to={detailTo}
+            state={detailState}
+            className="block"
+            aria-label="Open post"
+          >
+            <PostCarousel
+              media={post.media}
+              alt={post.caption ?? `Post by ${author.name}`}
+            />
+          </Link>
+        ) : (
+          <PostCarousel
             media={post.media}
             alt={post.caption ?? `Post by ${author.name}`}
           />
-        </Link>
-      )}
+        ))}
 
       <div className="px-4 py-3">
         <PostActions

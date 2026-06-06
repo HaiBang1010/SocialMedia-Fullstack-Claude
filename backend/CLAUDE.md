@@ -130,6 +130,7 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 Khi thêm endpoint mới, update bảng trên.
 
 > **PostMedia.objectKey** lưu S3 key (không chỉ URL) để `DeleteObject` khi xóa post — URL không đủ vì public-read URL có thể khác key. Xóa S3 là best-effort: fail thì log, không chặn DB delete.
+> **Carousel (Phase 3.1)**: `POST /posts` nhận `media[]` tối đa **5** (`createPostSchema.media.max(5)`). `createPost` đã `map((m, index) => ({...m, order: index}))` gán `order` 0..N-1 theo thứ tự client gửi; `postInclude` `orderBy {order: asc}`. KHÔNG migration (PostMedia model + field `order` đã có từ Phase 2). Frontend upload tuần tự N file (mỗi file 1 presign + 1 PUT) rồi 1 lần `POST /posts`.
 > **Visibility (follow-aware)**: GET 1 post / list — PUBLIC ai cũng xem; FOLLOWERS chỉ owner + follower; PRIVATE chỉ owner. Non-owner không đủ điều kiện → **404** (ẩn existence), không 403. Gate dùng chung `getViewablePost` (posts.service). Write (PATCH/DELETE) bởi non-owner → 403. Feed loại PRIVATE.
 > **Post DTO**: mọi response trả post (single/list/feed) đi qua `serializePost` → kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`.
 > **`optionalAuth`** (middleware/auth.ts): verify token nếu có, KHÔNG 401 nếu thiếu — dùng cho route public cần biết viewer.

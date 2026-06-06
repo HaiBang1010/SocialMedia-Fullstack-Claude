@@ -3,7 +3,7 @@
 > Issue, tech debt, ideas — chưa làm nhưng không quên.
 > Quy ước: [scope] mô tả ngắn — lý do/context
 
-## Phase 2 — In progress (chưa bắt đầu)
+## Phase 2 — Scope notes (BE + FE 2.4/2.5 đã xong)
 
 - [ ] [scope] Phase 2 chỉ đăng 1 ẢNH ĐƠN. Carousel multi-image đẩy về Phase 3.
 
@@ -41,6 +41,14 @@
 - [ ] [backend/storage] Creds MinIO hardcode `minio`/`minio12345` trong 
       docker-compose.yml (dev only). Phase polish: chuyển sang env var 
       (`${MINIO_ROOT_USER}`...) + secret thật cho prod, không commit creds.
+- [P3] [backend/media] Orphan S3 cleanup khi multi-image upload partial fail
+      (Checkpoint 3.1). 1 trong N PUT fail → ảnh đã upload thành object không
+      reference trong DB; retry hiện re-upload TOÀN BỘ → thêm orphan. Solution:
+      (a) memo uploaded `MediaInput[]` theo image id để retry skip file đã xong,
+      hoặc (b) periodic cleanup job xóa objects không reference trong DB.
+- [P3] [frontend/composer] Pointer-drag reorder cho `ImageStrip` (Checkpoint
+      3.1). Hiện dùng nút ◀▶ swap neighbour (ít code, no dep) — nâng lên kéo-thả
+      như IG khi có thời gian.
 
 
 ## DONE

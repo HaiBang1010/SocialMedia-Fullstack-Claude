@@ -1,6 +1,6 @@
 # Frontend — Project Memory
 
-> Phase 1A/1B/1C đã build xong (foundation + auth UI + design system "Beng" + layout shell + dark mode). Tiếp theo: Phase 2 (posts). File này là rules + setup thực tế.
+> Phase 1A/1B/1C + Phase 2 FE (2.4a/b/c posts UI + 2.5 follow/profile counts/public profile) + Phase 3.1 (multi-image carousel) đã build xong. File này là rules + setup thực tế; xem các section "Phase 2.4a"/"Phase 2.5 — DONE"/"Phase 3.1 — DONE" cuối file cho chi tiết.
 
 ## Stack versions (pinned)
 
@@ -163,3 +163,17 @@ Profile thật cho MỌI user (self + other) qua 1 endpoint, Follow button optim
 > **isSelf detection**: dùng `me.username === username` (KHÔNG dựa `isFollowing === null` — null cũng là anonymous, nhưng route protected nên null ⇒ self; vẫn ưu tiên username compare cho rõ).
 > **Follow scope**: mutation CHỈ patch cache `user(username)`. KHÔNG đụng feed → `post.isFollowingAuthor` + feed membership có thể stale tới refetch tự nhiên (chấp nhận, ngoài scope 2.5).
 > **Counts authoritative**: stats header (`postsCount/...`) qua `formatNumber` (compact). `postsCount` từ backend đã mirror grid visibility — KHÔNG còn là loaded-count + "+" như 2.4c.
+
+## Phase 3.1 — Multi-image carousel — DONE
+
+Post từ 1 ảnh → carousel tối đa **5 ảnh**. Data model Phase 2 đã carousel-ready (`PostMedia[]` + `order`) → chỉ đổi BE `createPostSchema.media.max(1)→.max(5)`, KHÔNG migration.
+
+- [x] **Composer state machine** (`PostComposerModal.tsx`): state đổi từ single → `images: ComposerImage[]` + `cropIndex` cursor + `ratio` lifted (shared). Step enum giữ `select→crop→caption→upload→done`; `crop` là 1 CropStage **re-keyed `key={image.id}`** chạy qua cursor (bắt buộc re-key để zoom/offset/preview reset sạch giữa ảnh). `goToCrop` vào ảnh chưa-crop đầu tiên; `handleCropped` advance tới ảnh chưa-crop kế hoặc → caption. Submit build `CroppedImage[]` theo array order.
+- [x] **Shared aspect ratio (IG-style)**: chọn 1:1/4:5/1.91 MỘT lần ở ảnh đầu, `ratioLocked = images.some(i=>i.cropped)` khóa cho ảnh 2..N → slide carousel không nhảy height. `CropStage` ratio thành **controlled props** (`ratio`/`onRatioChange`/`ratioLocked`), bỏ internal `useState`.
+- [x] **`ComposerImage`** (`composer/types.ts`): `{id, file, dimensions, isPassthrough, cropped: CroppedImage|null}` + `MAX_IMAGES=5`. `SelectStage` `<input multiple>` + drop-all, emit `onAdd`, cap 5 + message. `ImageStrip.tsx` (mới): thumbnail + X remove + ◀▶ reorder (swap neighbour), objectURL cache theo `id` (re-crop đổi blob mới revoke), revoke hết on unmount. Strip render ở Select + Caption (>1 ảnh).
+- [x] **`useCreatePost`**: `CroppedImage` → `CroppedImage[]`; upload **tuần tự** (`for...of`, KHÔNG Promise.all) N presign+PUT; progress gộp `((i+filePct/100)/n)*100`; thêm `uploadIndex`/`uploadTotal` cho UploadStage label "Uploading k/N…". Giữ no-optimistic + onSuccess (seed `post(id)` + invalidate `userPosts(me)`, KHÔNG đụng feed).
+- [x] **Render `PostCarousel.tsx`** (mới): `media.length<=1` → defer `PostMedia` (zero regression Phase 2). Nhiều ảnh: CSS scroll-snap (`snap-x snap-mandatory`, `scrollbar-hide`), active index qua `scrollLeft/clientWidth`, arrows `hidden md:grid`, dots, badge `Copy` top-right. Aspect từ `clampAspectRatio(media[0])`. Dùng ở `PostCard` (1 ảnh GIỮ `<Link>`, carousel KHÔNG Link — swipe/arrow không điều hướng; mở detail qua comment icon) + `PostDetailView`. `PostsGrid.GridItem` thêm badge `Copy` khi `media.length>1` (grid vẫn cover `media[0]`).
+
+> **GIF/AVIF (passthrough) = single-image-only**: nếu selection có GIF/AVIF thì phải là ảnh DUY NHẤT (passthrough giữ framing gốc → không ép được shared ratio → vỡ height-stability). Chặn ở `SelectStage` (`currentHasPassthrough || (incomingPassthrough && (images.length>0 || valid.length>1))`).
+> **Orphan S3 on retry** (known debt): 1 trong N PUT fail → các ảnh đã upload trước thành orphan (POST /posts chưa chạy). Retry re-upload TẤT CẢ (objectKey mới → thêm orphan). Chấp nhận — khớp posts.service "orphan check để Phase polish".
+> **Caption-only**: composer vẫn yêu cầu ≥1 ảnh (parity Phase 2.4c); hook media-optional vẫn handle caption-only nếu gọi từ chỗ khác.

@@ -188,7 +188,7 @@ export interface MediaInput {
 export interface CreatePostInput {
   caption?: string;
   visibility?: PostVisibility; // backend defaults to PUBLIC
-  media?: MediaInput[]; // Phase 2: max 1
+  media?: MediaInput[]; // Phase 3.1: carousel, max 5
 }
 
 // PATCH /posts/:id

@@ -8,7 +8,7 @@ import Spinner from '@/components/common/Spinner';
 import ErrorState from '@/components/common/ErrorState';
 import CommentList from '@/components/comment/CommentList';
 import CommentForm, { COMMENT_INPUT_ID } from '@/components/comment/CommentForm';
-import PostMedia from './PostMedia';
+import PostCarousel from './PostCarousel';
 import PostActions from './PostActions';
 
 interface PostDetailViewProps {
@@ -60,7 +60,7 @@ export default function PostDetailView({ postId }: PostDetailViewProps) {
     >
       {hasMedia && (
         <div className="flex items-center justify-center bg-black">
-          <PostMedia
+          <PostCarousel
             media={post.media}
             alt={post.caption ?? `Post by ${author.name}`}
             className="max-h-[85vh] bg-black"

@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from 'react';
 import { Link, useLocation, type Location } from 'react-router-dom';
-import { Heart, MessageCircle } from 'lucide-react';
+import { Heart, MessageCircle, Copy } from 'lucide-react';
 import { useUserPosts } from '@/features/posts/hooks/useUserPosts';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
@@ -103,6 +103,13 @@ function GridItem({
         <div className="flex size-full items-center justify-center p-3 text-center text-xs text-muted-foreground">
           <span className="line-clamp-4 whitespace-pre-line">{post.caption}</span>
         </div>
+      )}
+
+      {/* Multi-image badge */}
+      {post.media.length > 1 && (
+        <span className="absolute top-2 right-2 grid size-6 place-items-center rounded-full bg-black/55 text-white drop-shadow">
+          <Copy className="size-3.5" />
+        </span>
       )}
 
       {/* Hover overlay (desktop only) */}

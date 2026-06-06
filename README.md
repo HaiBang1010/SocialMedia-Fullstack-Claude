@@ -47,7 +47,7 @@ social-media/
 │       ├── middleware/
 │       └── modules/
 │
-└── frontend/                   ← React app (Phase 1C xong — auth UI + design system + layout)
+└── frontend/                   ← React app (Phase 2 FE xong — posts UI + follow + profile)
     ├── CLAUDE.md
     └── README.md
 ```
@@ -68,7 +68,7 @@ npm run dev                 # → http://localhost:3000
                             # → http://localhost:3000/docs (Swagger UI)
 ```
 
-### Frontend (Phase 1C xong)
+### Frontend (Phase 2 FE xong)
 
 ```bash
 cd frontend
@@ -88,7 +88,7 @@ npm run dev                 # → http://localhost:5173
 | 1B | Frontend UI auth (login/register form, profile) | ✅ Xong |
 | 1C | Design system "Beng" + layout shell + dark mode | ✅ Xong |
 | 2 (BE) | Posts core backend: posts CRUD, MinIO upload, follow, like, comment phẳng, feed API | ✅ Xong |
-| 2 (FE) | Posts core frontend: feed page, post card, create post, profile grid, like/comment/follow UI | ⏳ |
+| 2 (FE) | Posts core frontend: feed, post card, create post, profile grid, like/comment, follow button + profile counts, public profile `/users/:username` | ✅ Xong |
 | 3 | Posts nâng cao (carousel, video, reply, sticker) | ⏳ |
 | 4 | Stories (24h expire, archive, overlays) | ⏳ |
 | 5 | Messaging (1-1, group, reactions, recall, share post) | ⏳ |
@@ -105,7 +105,7 @@ Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PR
 | GET | `/docs` · `/docs/json` | - | Swagger UI + OpenAPI 3.1 spec (dev only) |
 | POST | `/auth/register` · `/login` · `/refresh` | - | đăng ký / đăng nhập / refresh token |
 | GET | `/auth/me` | ✓ | user hiện tại |
-| GET | `/users/:username` | - | profile public |
+| GET | `/users/:username` | optional | profile public + counts (posts/followers/following) + isFollowing |
 | PATCH | `/users/me` | ✓ | sửa profile |
 | GET | `/users/:username/posts` | optional | list post của user (cursor) |
 | POST · DELETE | `/users/:username/follow` | ✓ | follow / unfollow (idempotent) |

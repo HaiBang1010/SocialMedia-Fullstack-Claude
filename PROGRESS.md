@@ -6,6 +6,33 @@
 
 ---
 
+## 2026-06-06 — Checkpoint 3.1: Multi-image carousel (up to 5 photos)
+
+**Done:**
+- Post từ 1 ảnh → **carousel tối đa 5 ảnh**. Backend CHỈ đổi `createPostSchema.media .max(1)→.max(5)` — KHÔNG migration (PostMedia[] + field `order` đã carousel-ready từ Phase 2; `createPost` đã map `order` theo index, `postInclude` đã `orderBy {order: asc}`).
+- Composer 5-step refactor single→array: **multi-select upfront + Add more** (IG-style), crop từng ảnh qua `cropIndex` cursor, **shared aspect ratio** khóa từ ảnh đầu (slide không nhảy height), `ImageStrip` reorder ◀▶ + remove X. State container đổi 4 field single → `images: ComposerImage[]` + `cropIndex` + `ratio` lifted.
+- `useCreatePost` single→array: upload **tuần tự** N presign+PUT, progress gộp weighted + label "Uploading k/N…". Giữ no-optimistic + onSuccess (KHÔNG đụng feed).
+- Render `PostCarousel` mới (CSS scroll-snap, KHÔNG thêm library): `media.length<=1` short-circuit về `PostMedia` (zero regression Phase 2); nhiều ảnh → swipe native + arrows desktop + dots + badge. Wire `PostCard`/`PostDetailView` + badge `PostsGrid`.
+- 13 files: backend 1 dòng (`posts.schema.ts`) + 1 JSDoc; frontend refactor (composer 5 file, `useCreatePost`, render 3 file) + 3 file mới (`PostCarousel.tsx`, `composer/ImageStrip.tsx`, `composer/types.ts`).
+
+**Lưu ý kỹ thuật:**
+- **CropStage re-key `key={image.id}`** bắt buộc — không re-key thì zoom/offset/previewUrl/vp leak sang ảnh kế (bug tinh vi nhất của refactor cursor).
+- **Shared ratio** lift lên container, `ratioLocked = images.some(i=>i.cropped !== null)`; `CropStage` ratio chuyển từ internal `useState` → **controlled props** (`ratio`/`onRatioChange`/`ratioLocked`). Xóa hết ảnh → unlock tự nhiên.
+- **GIF/AVIF passthrough = single-only**: giữ framing gốc, không ép được shared ratio → chặn trộn carousel ở `SelectStage` (`currentHasPassthrough || incomingPassthrough && (count>0 || batch>1)`).
+- **Carousel feed KHÔNG bọc `<Link>`** (swipe/arrow priority — Link sẽ nuốt gesture); 1 ảnh GIỮ Link tap-to-open. Mở detail carousel qua comment icon. CSS scroll-snap native thay Swiper → 0 dependency mới.
+- **Sequential upload (KHÔNG Promise.all)**: progress gộp `((i+filePct/100)/n)*100` chính xác + fail attribution rõ (biết file nào fail).
+- `order` derive từ array index lúc submit → reorder/remove bất kỳ lúc nào đều đúng, không cần bookkeeping riêng.
+
+**Tech debt phát sinh (đề xuất BACKLOG, đã append):**
+- `[P3] [backend/media]` Orphan S3 cleanup khi multi-image upload partial fail — 1 trong N PUT fail → ảnh đã upload thành orphan (POST /posts chưa chạy); retry re-upload TẤT CẢ (objectKey mới → thêm orphan).
+- `[P3] [frontend/composer]` Pointer-drag reorder cho `ImageStrip` (hiện ◀▶ button swap neighbour).
+
+**Verify:** 9/10 — `tsc` backend + `tsc -b` frontend + `vite build` 0 lỗi (1967 modules), functional code-complete. Item thứ 10 (browser-interactive + backend curl 5-media) chờ user test: multi-select cap 5 / chặn ảnh 6 / chặn trộn GIF; crop shared-ratio lock từ ảnh 2; reorder ◀▶ + remove; sequential upload progress + label k/N; carousel swipe mobile / arrows desktop / dots / badge; **regression 1-ảnh** không chrome; dark + mobile.
+
+**Next:** Browser verify → done. Sau đó Phase 3.2 (video) + 3.3 (nested comment/reply); tag `phase-3-complete` khi cả 3 sub-phase xong (KHÔNG tag bây giờ).
+
+---
+
 ## 2026-06-06 — Checkpoint 2.5: Follow button + Profile counts + public profile route
 
 **Done:**

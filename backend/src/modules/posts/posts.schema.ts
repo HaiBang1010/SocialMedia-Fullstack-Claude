@@ -17,7 +17,7 @@ export const createPostSchema = z
   .object({
     caption: z.string().max(2200).optional(), // IG caption limit ~2200
     visibility: z.nativeEnum(PostVisibility).default('PUBLIC'),
-    media: z.array(mediaInputSchema).max(1).default([]), // Phase 2: max 1; carousel ở Phase 3
+    media: z.array(mediaInputSchema).max(5).default([]), // Phase 3.1: carousel up to 5 images
   })
   .refine(
     (data) => (data.caption?.trim()?.length ?? 0) > 0 || data.media.length > 0,

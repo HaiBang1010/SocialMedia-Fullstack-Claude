@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import type { CroppedImage } from '@/lib/cropImage';
 import type { PostVisibility } from '@/types/api';
+import { type ComposerImage } from './types';
+import ImageStrip from './ImageStrip';
 
 // IG caption limit — must match the backend `caption.max(2200)`.
 const CAPTION_MAX = 2200;
@@ -13,44 +14,51 @@ const VISIBILITY_OPTIONS: { value: PostVisibility; label: string }[] = [
 ];
 
 interface CaptionStageProps {
-  prepared: CroppedImage;
+  images: ComposerImage[]; // all cropped by this point
   caption: string;
   visibility: PostVisibility;
   onCaptionChange: (value: string) => void;
   onVisibilityChange: (value: PostVisibility) => void;
+  onRemove: (id: string) => void;
+  onReorder: (from: number, to: number) => void;
   onBack: () => void;
   onShare: () => void;
 }
 
-// Step 3 — cropped preview + caption + visibility. "Share" hands control to the
+// Step 3 — big preview of the first image + caption + visibility, plus the strip
+// for a final reorder/remove when it's a carousel. "Share" hands control to the
 // container, which fires the mutation and advances to the Upload step.
 export default function CaptionStage({
-  prepared,
+  images,
   caption,
   visibility,
   onCaptionChange,
   onVisibilityChange,
+  onRemove,
+  onReorder,
   onBack,
   onShare,
 }: CaptionStageProps) {
+  const primary = images[0]?.cropped ?? null;
   const [previewUrl, setPreviewUrl] = useState('');
   useEffect(() => {
-    const url = URL.createObjectURL(prepared.blob);
+    if (!primary) return;
+    const url = URL.createObjectURL(primary.blob);
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [prepared.blob]);
+  }, [primary]);
 
   return (
     <div className="flex flex-col">
       <div className="flex flex-col gap-4 p-4 sm:flex-row">
-        {/* Cropped preview thumbnail */}
+        {/* First-image preview */}
         <div className="mx-auto w-40 shrink-0 overflow-hidden rounded-lg bg-muted sm:mx-0">
-          {previewUrl && (
+          {previewUrl && primary && (
             <img
               src={previewUrl}
               alt=""
               className="size-full object-cover"
-              style={{ aspectRatio: prepared.width / prepared.height }}
+              style={{ aspectRatio: primary.width / primary.height }}
             />
           )}
         </div>
@@ -86,6 +94,13 @@ export default function CaptionStage({
           </label>
         </div>
       </div>
+
+      {/* Carousel review: reorder / remove before sharing */}
+      {images.length > 1 && (
+        <div className="border-t px-4 py-3">
+          <ImageStrip images={images} onRemove={onRemove} onReorder={onReorder} />
+        </div>
+      )}
 
       <div className="flex justify-between gap-3 border-t p-4">
         <Button variant="ghost" onClick={onBack}>

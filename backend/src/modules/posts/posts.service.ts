@@ -87,7 +87,7 @@ export async function getViewablePost(postId: string, viewerId?: string) {
 }
 
 /**
- * Tạo post + media (max 1 ở Phase 2) trong 1 lần create lồng nhau.
+ * Tạo post + media (carousel: max 5 images) trong 1 lần create lồng nhau.
  * KHÔNG verify object S3 tồn tại — tin client đã upload (orphan check để Phase polish).
  */
 export async function createPost(authorId: string, input: CreatePostInput) {

@@ -4,9 +4,9 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useComposerStore } from '@/stores/composerStore';
 import { useCreatePost } from '@/features/posts/hooks/useCreatePost';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
-import { PASSTHROUGH_MIME, type ImageDimensions } from '@/lib/image';
 import type { CroppedImage } from '@/lib/cropImage';
 import type { PostVisibility } from '@/types/api';
+import type { ComposerImage } from './composer/types';
 import SelectStage from './composer/SelectStage';
 import CropStage from './composer/CropStage';
 import CaptionStage from './composer/CaptionStage';
@@ -25,9 +25,11 @@ const STEP_TITLE: Record<Step, string> = {
 
 // Global post-composer modal — a single instance mounted in AppLayout, driven by
 // composerStore. Owns the 5-step state machine (select → crop → caption → upload
-// → done); each stage owns its own Back/Next/Share buttons and reports up.
-// Stages create + revoke their own preview object URLs, so closing the dialog
-// (which unmounts the active stage) cleans them up.
+// → done). For a carousel `crop` is a single CropStage driven by a cropIndex
+// cursor over the images array (re-keyed per image so its zoom/offset/preview
+// reset cleanly). The aspect ratio is chosen once on the first image and shared
+// by all (IG-style) so carousel slides never jump height. Stages create + revoke
+// their own preview object URLs, so closing the dialog cleans them up.
 export default function PostComposerModal() {
   const isOpen = useComposerStore((s) => s.isOpen);
   const close = useComposerStore((s) => s.close);
@@ -37,19 +39,20 @@ export default function PostComposerModal() {
   const create = useCreatePost();
 
   const [step, setStep] = useState<Step>('select');
-  const [file, setFile] = useState<File | null>(null);
-  const [dimensions, setDimensions] = useState<ImageDimensions | null>(null);
-  const [isPassthrough, setIsPassthrough] = useState(false);
-  const [prepared, setPrepared] = useState<CroppedImage | null>(null);
+  const [images, setImages] = useState<ComposerImage[]>([]);
+  const [cropIndex, setCropIndex] = useState(0);
+  const [ratio, setRatio] = useState(1); // SHARED aspect ratio, chosen once
   const [caption, setCaption] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('PUBLIC');
 
+  // Locked once any image has been cropped — images 2..N inherit the ratio.
+  const ratioLocked = images.some((i) => i.cropped !== null);
+
   const resetAll = () => {
     setStep('select');
-    setFile(null);
-    setDimensions(null);
-    setIsPassthrough(false);
-    setPrepared(null);
+    setImages([]);
+    setCropIndex(0);
+    setRatio(1);
     setCaption('');
     setVisibility('PUBLIC');
     create.reset();
@@ -65,27 +68,63 @@ export default function PostComposerModal() {
     if (create.isSuccess && step === 'upload') setStep('done');
   }, [create.isSuccess, step]);
 
-  const handleSelect = (f: File, dims: ImageDimensions) => {
-    setFile(f);
-    setDimensions(dims);
-    setIsPassthrough(PASSTHROUGH_MIME.has(f.type));
+  // ── Select ──
+  const handleAdd = (added: ComposerImage[]) =>
+    setImages((prev) => [...prev, ...added]);
+
+  const handleRemove = (id: string) => {
+    const next = images.filter((i) => i.id !== id);
+    setImages(next);
+    if (next.length === 0) {
+      setCropIndex(0);
+      setStep('select'); // composer always needs ≥1 image
+      return;
+    }
+    if (cropIndex >= next.length) setCropIndex(next.length - 1);
+  };
+
+  const handleReorder = (from: number, to: number) => {
+    if (to < 0 || to >= images.length) return;
+    const next = [...images];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setImages(next);
+  };
+
+  // Enter the crop loop at the first un-cropped image (so adding photos later
+  // only crops the new ones); skip straight to caption when all are cropped.
+  const goToCrop = () => {
+    const idx = images.findIndex((i) => i.cropped === null);
+    if (idx === -1) {
+      setStep('caption');
+      return;
+    }
+    setCropIndex(idx);
     setStep('crop');
   };
 
-  const handleBackToSelect = () => {
-    setFile(null);
-    setDimensions(null);
-    setPrepared(null);
-    setStep('select');
+  // ── Crop ──
+  const handleCropped = (prepared: CroppedImage) => {
+    const next = images.map((img, i) =>
+      i === cropIndex ? { ...img, cropped: prepared } : img,
+    );
+    setImages(next);
+    const idx = next.findIndex((i) => i.cropped === null);
+    if (idx === -1) setStep('caption');
+    else setCropIndex(idx);
   };
 
-  const handleCropped = (p: CroppedImage) => {
-    setPrepared(p);
-    setStep('caption');
+  const handleCropBack = () => {
+    if (cropIndex > 0) setCropIndex(cropIndex - 1);
+    else setStep('select');
   };
 
+  // ── Caption → submit ──
   const submitPost = () => {
-    if (!prepared) return;
+    const prepared = images
+      .map((i) => i.cropped)
+      .filter((c): c is CroppedImage => c !== null);
+    if (prepared.length === 0) return;
     create.submit({ caption, visibility, media: prepared });
   };
 
@@ -107,25 +146,41 @@ export default function PostComposerModal() {
   const renderStep = () => {
     switch (step) {
       case 'select':
-        return <SelectStage onSelect={handleSelect} />;
-      case 'crop':
-        return file && dimensions ? (
+        return (
+          <SelectStage
+            images={images}
+            onAdd={handleAdd}
+            onRemove={handleRemove}
+            onReorder={handleReorder}
+            onNext={goToCrop}
+          />
+        );
+      case 'crop': {
+        const current = images[cropIndex];
+        return current ? (
           <CropStage
-            file={file}
-            dimensions={dimensions}
-            isPassthrough={isPassthrough}
-            onBack={handleBackToSelect}
+            key={current.id}
+            file={current.file}
+            dimensions={current.dimensions}
+            isPassthrough={current.isPassthrough}
+            ratio={ratio}
+            onRatioChange={setRatio}
+            ratioLocked={ratioLocked}
+            onBack={handleCropBack}
             onComplete={handleCropped}
           />
         ) : null;
+      }
       case 'caption':
-        return prepared ? (
+        return images.length > 0 ? (
           <CaptionStage
-            prepared={prepared}
+            images={images}
             caption={caption}
             visibility={visibility}
             onCaptionChange={setCaption}
             onVisibilityChange={setVisibility}
+            onRemove={handleRemove}
+            onReorder={handleReorder}
             onBack={() => setStep('crop')}
             onShare={handleShare}
           />
@@ -135,6 +190,8 @@ export default function PostComposerModal() {
           <UploadStage
             phase={create.phase}
             progress={create.progress}
+            uploadIndex={create.uploadIndex}
+            uploadTotal={create.uploadTotal}
             error={create.error}
             onRetry={submitPost}
             onBack={() => setStep('caption')}
@@ -157,7 +214,14 @@ export default function PostComposerModal() {
         className="flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col gap-0 rounded-none p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-xl"
       >
         <div className="flex h-12 shrink-0 items-center justify-center border-b px-12">
-          <DialogTitle className="text-base">{STEP_TITLE[step]}</DialogTitle>
+          <DialogTitle className="text-base">
+            {STEP_TITLE[step]}
+            {step === 'crop' && images.length > 1 && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
+                {cropIndex + 1}/{images.length}
+              </span>
+            )}
+          </DialogTitle>
         </div>
         <div className="flex-1 overflow-y-auto">{renderStep()}</div>
       </DialogContent>

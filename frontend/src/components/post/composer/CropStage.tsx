@@ -24,6 +24,9 @@ interface CropStageProps {
   file: File;
   dimensions: ImageDimensions;
   isPassthrough: boolean; // GIF/AVIF — upload as-is, no canvas re-encode
+  ratio: number; // shared aspect ratio, owned by the container (IG: chosen once)
+  onRatioChange: (ratio: number) => void; // only effective while !ratioLocked
+  ratioLocked: boolean; // images 2..N inherit the first image's ratio
   onBack: () => void;
   onComplete: (prepared: CroppedImage) => void;
 }
@@ -37,13 +40,15 @@ export default function CropStage({
   file,
   dimensions,
   isPassthrough,
+  ratio,
+  onRatioChange,
+  ratioLocked,
   onBack,
   onComplete,
 }: CropStageProps) {
   const { width: natW, height: natH } = dimensions;
 
   const [previewUrl, setPreviewUrl] = useState('');
-  const [ratio, setRatio] = useState(1);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [offset, setOffset] = useState<CropOffset>({ x: 0, y: 0 });
   const [vp, setVp] = useState({ w: 0, h: 0 });
@@ -82,8 +87,10 @@ export default function CropStage({
   };
 
   // Switching ratio reshapes the viewport → recenter (old offset is invalid).
+  // No-op once locked (images 2..N share the first image's ratio).
   const changeRatio = (value: number) => {
-    setRatio(value);
+    if (ratioLocked) return;
+    onRatioChange(value);
     setOffset({ x: 0, y: 0 });
   };
 
@@ -217,18 +224,26 @@ export default function CropStage({
 
       {/* Controls: ratio + zoom */}
       <div className="flex flex-col gap-3 p-4">
-        <div className="flex items-center justify-center gap-2">
-          {RATIOS.map((r) => (
-            <Button
-              key={r.label}
-              type="button"
-              size="sm"
-              variant={ratio === r.value ? 'default' : 'outline'}
-              onClick={() => changeRatio(r.value)}
-            >
-              {r.label}
-            </Button>
-          ))}
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center justify-center gap-2">
+            {RATIOS.map((r) => (
+              <Button
+                key={r.label}
+                type="button"
+                size="sm"
+                variant={ratio === r.value ? 'default' : 'outline'}
+                disabled={ratioLocked}
+                onClick={() => changeRatio(r.value)}
+              >
+                {r.label}
+              </Button>
+            ))}
+          </div>
+          {ratioLocked && (
+            <p className="text-xs text-muted-foreground">
+              All photos share the first photo's ratio
+            </p>
+          )}
         </div>
         <input
           type="range"

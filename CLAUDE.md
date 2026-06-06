@@ -13,7 +13,7 @@ Instagram-like social media platform, mục đích học full-stack. Solo dev. P
 
 ```
 social-media/
-├── frontend/      ← React + Vite (Phase 1A/1B/1C xong: foundation + auth UI + design system/layout)
+├── frontend/      ← React + Vite (Phase 1A/1B/1C + Phase 2 FE 2.4/2.5 xong: posts UI + follow + profile)
 ├── backend/       ← Express + Prisma + PostgreSQL
 └── docs (README.md, ARCHITECTURE.md, WORKING_WITH_CLAUDE.md)
 ```

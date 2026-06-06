@@ -4,6 +4,10 @@ import type { CreatePostPhase } from '@/features/posts/hooks/useCreatePost';
 interface UploadStageProps {
   phase: CreatePostPhase;
   progress: number;
+  // 1-based index of the image currently uploading + total. When total > 1 the
+  // label shows "Uploading 2/5…" so a multi-image wait reads as progress.
+  uploadIndex: number;
+  uploadTotal: number;
   error: Error | null;
   onRetry: () => void;
   onBack: () => void;
@@ -15,6 +19,8 @@ interface UploadStageProps {
 export default function UploadStage({
   phase,
   progress,
+  uploadIndex,
+  uploadTotal,
   error,
   onRetry,
   onBack,
@@ -39,8 +45,14 @@ export default function UploadStage({
   }
 
   // Progress only advances during the S3 PUT; the POST /posts leg shows a full
-  // bar with a "Publishing…" label.
-  const label = phase === 'publishing' ? 'Publishing…' : 'Uploading…';
+  // bar with a "Publishing…" label. For a carousel the upload label counts
+  // images ("Uploading 2/5…").
+  const label =
+    phase === 'publishing'
+      ? 'Publishing…'
+      : uploadTotal > 1
+        ? `Uploading ${uploadIndex}/${uploadTotal}…`
+        : 'Uploading…';
   const pct = phase === 'publishing' ? 100 : progress;
 
   return (

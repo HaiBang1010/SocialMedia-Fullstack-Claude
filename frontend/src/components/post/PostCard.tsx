@@ -4,6 +4,7 @@ import { formatRelativeTime } from '@/lib/format';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import Avatar from '@/components/common/Avatar';
 import PostCarousel from './PostCarousel';
+import PostVideo from './PostVideo';
 import PostActions from './PostActions';
 
 interface PostCardProps {
@@ -36,10 +37,15 @@ export default function PostCard({ post }: PostCardProps) {
       </header>
 
       {post.media.length > 0 &&
-        // A single image stays a tap-to-open link (current behaviour). A
-        // carousel is NOT a link — swiping / arrow taps must not navigate; open
-        // detail via the comment icon instead.
-        (post.media.length === 1 ? (
+        // A video toggles mute on tap, and a carousel takes swipe/arrow gestures
+        // — neither is wrapped in a Link (it would swallow the gesture); open
+        // detail via the comment icon instead. A single image stays tap-to-open.
+        (post.media[0].type === 'VIDEO' ? (
+          <PostVideo
+            media={post.media}
+            alt={post.caption ?? `Post by ${author.name}`}
+          />
+        ) : post.media.length === 1 ? (
           <Link
             to={detailTo}
             state={detailState}

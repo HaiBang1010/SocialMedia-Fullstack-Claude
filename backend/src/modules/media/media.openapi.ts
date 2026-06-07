@@ -1,5 +1,5 @@
 import type { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
-import { presignRequestSchema, presignResponseSchema } from "./media.schema";
+import { presignRequestBaseSchema, presignResponseSchema } from "./media.schema";
 import {
   errorResponseSchema,
   validationErrorResponseSchema,
@@ -10,7 +10,7 @@ const json = <T>(schema: T) => ({
 });
 
 export function registerMediaOpenApi(registry: OpenAPIRegistry) {
-  const PresignReq = registry.register("PresignRequest", presignRequestSchema);
+  const PresignReq = registry.register("PresignRequest", presignRequestBaseSchema);
   const PresignRes = registry.register("PresignResponse", presignResponseSchema);
 
   registry.registerPath({

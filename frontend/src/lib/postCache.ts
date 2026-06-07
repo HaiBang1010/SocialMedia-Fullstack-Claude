@@ -49,6 +49,38 @@ function mapPostInInfinite<T extends { posts: Post[] }>(
   return touched ? { ...data, pages } : data;
 }
 
+// Drop a post from an infinite list, cloning only the pages/arrays that change.
+// Returns the SAME reference when the post wasn't present so React Query doesn't
+// notify observers of lists that don't hold it.
+function removePostFromInfinite<T extends { posts: Post[] }>(
+  data: InfiniteData<T> | undefined,
+  postId: string,
+): InfiniteData<T> | undefined {
+  if (!data) return data;
+  let touched = false;
+  const pages = data.pages.map((page) => {
+    const posts = page.posts.filter((p) => p.id !== postId);
+    if (posts.length === page.posts.length) return page;
+    touched = true;
+    return { ...page, posts };
+  });
+  return touched ? { ...data, pages } : data;
+}
+
+// Remove a post from the feed + every userPosts list (used by delete). The single
+// post(id) cache is handled separately by the caller (kept until navigation so an
+// open detail view doesn't flash "not found", then removeQueries on success).
+export function removePostFromLists(qc: QueryClient, postId: string): void {
+  qc.setQueriesData<InfiniteData<FeedResponse>>(
+    { queryKey: queryKeys.feed() },
+    (data) => removePostFromInfinite(data, postId),
+  );
+  qc.setQueriesData<InfiniteData<PostListResponse>>(
+    { predicate: userPostsPredicate },
+    (data) => removePostFromInfinite(data, postId),
+  );
+}
+
 // Patch a post everywhere it's cached. Synchronous; a no-op for any cache that
 // doesn't currently hold the post.
 export function patchPostInCaches(

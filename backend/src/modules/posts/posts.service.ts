@@ -101,6 +101,9 @@ export async function createPost(authorId: string, input: CreatePostInput) {
           type: m.type,
           url: m.url,
           objectKey: m.objectKey,
+          thumbnailUrl: m.thumbnailUrl,
+          thumbnailObjectKey: m.thumbnailObjectKey,
+          duration: m.duration,
           width: m.width,
           height: m.height,
           order: index,
@@ -228,7 +231,7 @@ export async function updatePost(postId: string, userId: string, input: UpdatePo
 export async function deletePost(postId: string, userId: string): Promise<void> {
   const post = await prisma.post.findUnique({
     where: { id: postId },
-    include: { media: { select: { objectKey: true } } },
+    include: { media: { select: { objectKey: true, thumbnailObjectKey: true } } },
   });
 
   if (!post) {
@@ -241,14 +244,18 @@ export async function deletePost(postId: string, userId: string): Promise<void> 
   // Cascade (onDelete: Cascade) tự xóa PostMedia rows.
   await prisma.post.delete({ where: { id: postId } });
 
-  // Best-effort cleanup trên S3 — không chặn việc xóa DB nếu fail.
-  for (const m of post.media) {
+  // Best-effort cleanup trên S3 — không chặn việc xóa DB nếu fail. Mỗi media item
+  // có thể kèm 1 thumbnail (video poster) → xóa cả 2 key.
+  const keys = post.media.flatMap((m) =>
+    m.thumbnailObjectKey ? [m.objectKey, m.thumbnailObjectKey] : [m.objectKey],
+  );
+  for (const key of keys) {
     try {
       await s3Client.send(
-        new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: m.objectKey }),
+        new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
       );
     } catch (err) {
-      console.error(`[deletePost] Failed to delete S3 object ${m.objectKey}:`, err);
+      console.error(`[deletePost] Failed to delete S3 object ${key}:`, err);
     }
   }
 }

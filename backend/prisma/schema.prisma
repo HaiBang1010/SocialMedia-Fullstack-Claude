@@ -62,8 +62,9 @@ model PostMedia {
   type         MediaType
   url          String // publicUrl from presign response
   objectKey    String // S3 key, used to DeleteObject when the post is deleted
-  thumbnailUrl String?
-  duration     Int?
+  thumbnailUrl String? // video poster URL (frontend-extracted), null for images
+  thumbnailObjectKey String? // S3 key of the thumbnail, used to DeleteObject alongside the video
+  duration     Int? // video length in seconds, null for images
   order        Int       @default(0)
   width        Int?
   height       Int?

@@ -30,7 +30,10 @@ export function registerPostsOpenApi(registry: OpenAPIRegistry) {
     method: 'post',
     path: '/posts',
     tags: ['Posts'],
-    summary: 'Create a post (image and/or caption)',
+    summary: 'Create a post (up to 5 images OR a single video, and/or caption)',
+    description:
+      'Media is either up to 5 images (carousel) or exactly one video (Phase 3.2). ' +
+      'A video cannot be mixed with images.',
     security: [{ bearerAuth: [] }],
     request: { body: json(CreatePostReq) },
     responses: {

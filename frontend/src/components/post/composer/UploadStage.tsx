@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import type { CreatePostPhase } from '@/features/posts/hooks/useCreatePost';
 
 interface UploadStageProps {
+  mediaKind: 'image' | 'video';
   phase: CreatePostPhase;
   progress: number;
   // 1-based index of the image currently uploading + total. When total > 1 the
@@ -17,6 +18,7 @@ interface UploadStageProps {
 // auto-advances to Done on success (it watches the mutation), so the happy path
 // here is purely presentational.
 export default function UploadStage({
+  mediaKind,
   phase,
   progress,
   uploadIndex,
@@ -50,9 +52,11 @@ export default function UploadStage({
   const label =
     phase === 'publishing'
       ? 'Publishing…'
-      : uploadTotal > 1
-        ? `Uploading ${uploadIndex}/${uploadTotal}…`
-        : 'Uploading…';
+      : mediaKind === 'video'
+        ? 'Uploading video…'
+        : uploadTotal > 1
+          ? `Uploading ${uploadIndex}/${uploadTotal}…`
+          : 'Uploading…';
   const pct = phase === 'publishing' ? 100 : progress;
 
   return (

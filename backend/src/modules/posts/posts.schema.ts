@@ -9,6 +9,11 @@ const mediaInputSchema = z.object({
   type: z.nativeEnum(MediaType).default('IMAGE'),
   url: z.string().url(),
   objectKey: z.string().min(1),
+  // Video only (Phase 3.2): poster image extracted client-side, uploaded as JPEG.
+  // thumbnailObjectKey lets deletePost clean the poster up alongside the video.
+  thumbnailUrl: z.string().url().optional(),
+  thumbnailObjectKey: z.string().min(1).optional(),
+  duration: z.number().int().positive().optional(), // video length in seconds
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
 });
@@ -22,6 +27,13 @@ export const createPostSchema = z
   .refine(
     (data) => (data.caption?.trim()?.length ?? 0) > 0 || data.media.length > 0,
     { message: 'Post must have caption or at least one media' },
+  )
+  // Phase 3.2: a video is single-media-only — no other media may accompany it.
+  .refine(
+    (data) =>
+      !data.media.some((m) => m.type === 'VIDEO') ||
+      (data.media.length === 1 && data.media[0].type === 'VIDEO'),
+    { message: 'A video must be posted on its own (no other media)' },
   );
 
 export const updatePostSchema = z.object({
@@ -40,6 +52,7 @@ export const postMediaSchema = z.object({
   type: z.nativeEnum(MediaType),
   url: z.string().url(),
   thumbnailUrl: z.string().url().nullable(),
+  duration: z.number().int().nullable(), // video length in seconds, null for images
   width: z.number().int().nullable(),
   height: z.number().int().nullable(),
   order: z.number().int(),

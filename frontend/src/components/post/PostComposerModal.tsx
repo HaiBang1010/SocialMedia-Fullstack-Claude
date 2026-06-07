@@ -2,34 +2,39 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useComposerStore } from '@/stores/composerStore';
-import { useCreatePost } from '@/features/posts/hooks/useCreatePost';
+import { useCreatePost, type MediaPayload } from '@/features/posts/hooks/useCreatePost';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import type { CroppedImage } from '@/lib/cropImage';
+import type { VideoMedia } from '@/lib/video';
 import type { PostVisibility } from '@/types/api';
-import type { ComposerImage } from './composer/types';
+import type { ComposerImage, ComposerVideo } from './composer/types';
 import SelectStage from './composer/SelectStage';
 import CropStage from './composer/CropStage';
+import VideoStage from './composer/VideoStage';
 import CaptionStage from './composer/CaptionStage';
 import UploadStage from './composer/UploadStage';
 import DoneStage from './composer/DoneStage';
 
-type Step = 'select' | 'crop' | 'caption' | 'upload' | 'done';
+type Step = 'select' | 'crop' | 'video' | 'caption' | 'upload' | 'done';
 
 const STEP_TITLE: Record<Step, string> = {
   select: 'New post',
   crop: 'Crop',
+  video: 'Video',
   caption: 'Caption',
   upload: 'Sharing',
   done: 'Done',
 };
 
 // Global post-composer modal — a single instance mounted in AppLayout, driven by
-// composerStore. Owns the 5-step state machine (select → crop → caption → upload
-// → done). For a carousel `crop` is a single CropStage driven by a cropIndex
-// cursor over the images array (re-keyed per image so its zoom/offset/preview
-// reset cleanly). The aspect ratio is chosen once on the first image and shared
-// by all (IG-style) so carousel slides never jump height. Stages create + revoke
-// their own preview object URLs, so closing the dialog cleans them up.
+// composerStore. Owns the state machine, which forks after Select:
+//   image flow:  select → crop → caption → upload → done
+//   video flow:  select → video → caption → upload → done
+// The active flow is DERIVED (a video → 'video', any image → 'image', else null)
+// so the two media holders can't drift out of sync. Image crop is a single
+// CropStage driven by a cropIndex cursor (re-keyed per image); a video is
+// single-media-only with no crop / aspect lock. Stages create + revoke their own
+// preview object URLs, so closing the dialog cleans them up.
 export default function PostComposerModal() {
   const isOpen = useComposerStore((s) => s.isOpen);
   const close = useComposerStore((s) => s.close);
@@ -40,10 +45,18 @@ export default function PostComposerModal() {
 
   const [step, setStep] = useState<Step>('select');
   const [images, setImages] = useState<ComposerImage[]>([]);
+  const [video, setVideo] = useState<ComposerVideo | null>(null);
   const [cropIndex, setCropIndex] = useState(0);
   const [ratio, setRatio] = useState(1); // SHARED aspect ratio, chosen once
   const [caption, setCaption] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('PUBLIC');
+
+  // Single source of truth for which flow is active.
+  const flow: 'image' | 'video' | null = video
+    ? 'video'
+    : images.length > 0
+      ? 'image'
+      : null;
 
   // Locked once any image has been cropped — images 2..N inherit the ratio.
   const ratioLocked = images.some((i) => i.cropped !== null);
@@ -51,6 +64,7 @@ export default function PostComposerModal() {
   const resetAll = () => {
     setStep('select');
     setImages([]);
+    setVideo(null);
     setCropIndex(0);
     setRatio(1);
     setCaption('');
@@ -77,7 +91,7 @@ export default function PostComposerModal() {
     setImages(next);
     if (next.length === 0) {
       setCropIndex(0);
-      setStep('select'); // composer always needs ≥1 image
+      setStep('select'); // composer always needs ≥1 media
       return;
     }
     if (cropIndex >= next.length) setCropIndex(next.length - 1);
@@ -89,6 +103,21 @@ export default function PostComposerModal() {
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     setImages(next);
+  };
+
+  const handlePickVideo = (picked: ComposerVideo) => setVideo(picked);
+  const handleClearVideo = () => {
+    setVideo(null);
+    setStep('select');
+  };
+
+  // Select "Next" routes by flow.
+  const handleSelectNext = () => {
+    if (flow === 'video') {
+      setStep('video');
+      return;
+    }
+    goToCrop();
   };
 
   // Enter the crop loop at the first un-cropped image (so adding photos later
@@ -103,7 +132,7 @@ export default function PostComposerModal() {
     setStep('crop');
   };
 
-  // ── Crop ──
+  // ── Crop (image) ──
   const handleCropped = (prepared: CroppedImage) => {
     const next = images.map((img, i) =>
       i === cropIndex ? { ...img, cropped: prepared } : img,
@@ -119,13 +148,27 @@ export default function PostComposerModal() {
     else setStep('select');
   };
 
+  // ── Video ──
+  const handleVideoPrepared = (prepared: VideoMedia) => {
+    setVideo((prev) => (prev ? { ...prev, prepared } : prev));
+    setStep('caption');
+  };
+
   // ── Caption → submit ──
+  const handleCaptionBack = () =>
+    setStep(flow === 'video' ? 'video' : 'crop');
+
   const submitPost = () => {
-    const prepared = images
-      .map((i) => i.cropped)
-      .filter((c): c is CroppedImage => c !== null);
-    if (prepared.length === 0) return;
-    create.submit({ caption, visibility, media: prepared });
+    let media: MediaPayload[];
+    if (flow === 'video') {
+      media = video?.prepared ? [video.prepared] : [];
+    } else {
+      media = images
+        .map((i) => i.cropped)
+        .filter((c): c is CroppedImage => c !== null);
+    }
+    if (media.length === 0) return;
+    create.submit({ caption, visibility, media });
   };
 
   const handleShare = () => {
@@ -148,11 +191,15 @@ export default function PostComposerModal() {
       case 'select':
         return (
           <SelectStage
+            flow={flow}
             images={images}
+            video={video}
             onAdd={handleAdd}
             onRemove={handleRemove}
             onReorder={handleReorder}
-            onNext={goToCrop}
+            onPickVideo={handlePickVideo}
+            onClearVideo={handleClearVideo}
+            onNext={handleSelectNext}
           />
         );
       case 'crop': {
@@ -171,23 +218,36 @@ export default function PostComposerModal() {
           />
         ) : null;
       }
+      case 'video':
+        return video ? (
+          <VideoStage
+            key={video.id}
+            file={video.file}
+            dimensions={video.dimensions}
+            duration={video.duration}
+            onBack={handleClearVideo}
+            onComplete={handleVideoPrepared}
+          />
+        ) : null;
       case 'caption':
-        return images.length > 0 ? (
+        return flow ? (
           <CaptionStage
             images={images}
+            video={video}
             caption={caption}
             visibility={visibility}
             onCaptionChange={setCaption}
             onVisibilityChange={setVisibility}
             onRemove={handleRemove}
             onReorder={handleReorder}
-            onBack={() => setStep('crop')}
+            onBack={handleCaptionBack}
             onShare={handleShare}
           />
         ) : null;
       case 'upload':
         return (
           <UploadStage
+            mediaKind={flow ?? 'image'}
             phase={create.phase}
             progress={create.progress}
             uploadIndex={create.uploadIndex}

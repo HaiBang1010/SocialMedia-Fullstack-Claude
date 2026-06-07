@@ -78,7 +78,8 @@ export interface PostMedia {
   id: string;
   type: MediaType;
   url: string;
-  thumbnailUrl: string | null;
+  thumbnailUrl: string | null; // video poster, null for images
+  duration: number | null; // video length in seconds, null for images
   width: number | null;
   height: number | null;
   order: number;
@@ -154,14 +155,15 @@ export interface UserListResponse {
 // ── Media (presigned upload) ───────────────────────────────────────────
 
 // POST /media/presign — request. contentType union must stay in sync with
-// the backend enum (5 MIME types); size in bytes, backend cap is 10MB.
+// the backend enum; size in bytes, backend cap is 10MB for images, 50MB for video.
 export interface PresignRequest {
   contentType:
     | 'image/jpeg'
     | 'image/png'
     | 'image/webp'
     | 'image/gif'
-    | 'image/avif';
+    | 'image/avif'
+    | 'video/mp4';
   size: number;
 }
 
@@ -180,6 +182,9 @@ export interface MediaInput {
   type?: MediaType; // backend defaults to IMAGE
   url: string;
   objectKey: string;
+  thumbnailUrl?: string; // video poster URL (after uploading the poster)
+  thumbnailObjectKey?: string; // poster S3 key, for deletePost cleanup
+  duration?: number; // video length in seconds
   width?: number;
   height?: number;
 }

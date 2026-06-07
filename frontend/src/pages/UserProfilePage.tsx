@@ -57,6 +57,7 @@ export default function UserProfilePage() {
             <ProfileEditForm
               initialName={user.name}
               initialBio={user.bio ?? ''}
+              initialIsPrivate={user.isPrivate}
               onCancel={() => setEditing(false)}
               onSaved={(updated) => {
                 updateUser(updated);

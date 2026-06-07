@@ -7,6 +7,7 @@ import { applyFieldErrors } from '@/lib/apiError';
 import { profileSchema, type ProfileValues } from '@/lib/validations/profile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import {
   Form,
   FormControl,
@@ -20,21 +21,28 @@ import type { User } from '@/types/api';
 interface ProfileEditFormProps {
   initialName: string;
   initialBio: string;
+  initialIsPrivate: boolean;
   onCancel: () => void;
   onSaved: (user: User) => void;
 }
 
-// Edit name + bio (PATCH /users/me). Field errors map back onto the form; the
-// caller's onSaved handles store update + cache invalidation.
+// Edit name + bio + private-account toggle (PATCH /users/me). Field errors map
+// back onto the form; the caller's onSaved handles store update + cache
+// invalidation.
 export function ProfileEditForm({
   initialName,
   initialBio,
+  initialIsPrivate,
   onCancel,
   onSaved,
 }: ProfileEditFormProps) {
   const form = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { name: initialName, bio: initialBio },
+    defaultValues: {
+      name: initialName,
+      bio: initialBio,
+      isPrivate: initialIsPrivate,
+    },
   });
 
   const mutation = useMutation({
@@ -79,6 +87,26 @@ export function ProfileEditForm({
                 <Input placeholder="Tell us about yourself" {...field} />
               </FormControl>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="isPrivate"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <FormLabel>Private account</FormLabel>
+                <p className="text-xs text-muted-foreground">
+                  When private, only approved followers can see your posts.
+                </p>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
             </FormItem>
           )}
         />

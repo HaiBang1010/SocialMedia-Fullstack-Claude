@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { PostVisibility } from '@/types/api';
-import { type ComposerImage } from './types';
+import { type ComposerImage, type ComposerVideo } from './types';
 import ImageStrip from './ImageStrip';
 
 // IG caption limit — must match the backend `caption.max(2200)`.
@@ -14,7 +15,8 @@ const VISIBILITY_OPTIONS: { value: PostVisibility; label: string }[] = [
 ];
 
 interface CaptionStageProps {
-  images: ComposerImage[]; // all cropped by this point
+  images: ComposerImage[]; // all cropped by this point (image flow)
+  video: ComposerVideo | null; // set on the video flow (prepared by VideoStage)
   caption: string;
   visibility: PostVisibility;
   onCaptionChange: (value: string) => void;
@@ -25,11 +27,13 @@ interface CaptionStageProps {
   onShare: () => void;
 }
 
-// Step 3 — big preview of the first image + caption + visibility, plus the strip
-// for a final reorder/remove when it's a carousel. "Share" hands control to the
-// container, which fires the mutation and advances to the Upload step.
+// Step 3 — preview (first image, or the video poster with a play badge) + caption
+// + visibility, plus the strip for a final reorder/remove when it's a carousel.
+// "Share" hands control to the container, which fires the mutation and advances
+// to the Upload step.
 export default function CaptionStage({
   images,
+  video,
   caption,
   visibility,
   onCaptionChange,
@@ -39,27 +43,43 @@ export default function CaptionStage({
   onBack,
   onShare,
 }: CaptionStageProps) {
+  const isVideo = video !== null;
   const primary = images[0]?.cropped ?? null;
+  // The poster is a JPEG blob, so an <img> renders it for both flows.
+  const previewBlob = isVideo ? video?.prepared?.thumbnailBlob ?? null : primary?.blob ?? null;
+  const aspectRatio = isVideo
+    ? video!.dimensions.width / video!.dimensions.height
+    : primary
+      ? primary.width / primary.height
+      : undefined;
+
   const [previewUrl, setPreviewUrl] = useState('');
   useEffect(() => {
-    if (!primary) return;
-    const url = URL.createObjectURL(primary.blob);
+    if (!previewBlob) return;
+    const url = URL.createObjectURL(previewBlob);
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [primary]);
+  }, [previewBlob]);
 
   return (
     <div className="flex flex-col">
       <div className="flex flex-col gap-4 p-4 sm:flex-row">
-        {/* First-image preview */}
-        <div className="mx-auto w-40 shrink-0 overflow-hidden rounded-lg bg-muted sm:mx-0">
-          {previewUrl && primary && (
+        {/* Preview: first image, or video poster + play badge */}
+        <div className="relative mx-auto w-40 shrink-0 overflow-hidden rounded-lg bg-muted sm:mx-0">
+          {previewUrl && (
             <img
               src={previewUrl}
               alt=""
               className="size-full object-cover"
-              style={{ aspectRatio: primary.width / primary.height }}
+              style={aspectRatio ? { aspectRatio } : undefined}
             />
+          )}
+          {isVideo && (
+            <span className="absolute inset-0 grid place-items-center">
+              <span className="grid size-9 place-items-center rounded-full bg-black/55 text-white">
+                <Play className="size-4 fill-white" />
+              </span>
+            </span>
           )}
         </div>
 
@@ -95,8 +115,8 @@ export default function CaptionStage({
         </div>
       </div>
 
-      {/* Carousel review: reorder / remove before sharing */}
-      {images.length > 1 && (
+      {/* Carousel review: reorder / remove before sharing (image flow only) */}
+      {!isVideo && images.length > 1 && (
         <div className="border-t px-4 py-3">
           <ImageStrip images={images} onRemove={onRemove} onReorder={onReorder} />
         </div>

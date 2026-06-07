@@ -24,6 +24,7 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/webp": "webp",
   "image/gif": "gif",
   "image/avif": "avif",
+  "video/mp4": "mp4",
 };
 
 /** Public URL to serve an object after upload (bucket is public-read in dev). */

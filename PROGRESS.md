@@ -6,6 +6,37 @@
 
 ---
 
+## 2026-06-07 — Checkpoint 3.2: Video upload + playback (+ delete post, private toggle, change visibility)
+
+**Done:**
+- **Video upload (1 MP4/post, single-media-only, KHÔNG trộn ảnh)**: presign thêm `video/mp4` + per-type size cap (image 10MB / video 50MB), thumbnail extract client-side (Canvas + `<video>` seek 0.1s, KHÔNG transcode). Composer fork 2 nhánh sau Select: image → crop, video → `VideoStage`. Render `PostVideo` (autoplay-on-scroll muted, object-contain letterbox, mute toggle, duration overlay) wire vào PostCard/PostDetailView/PostsGrid (Play badge).
+- **Migration `add_post_media_thumbnail_object_key`**: thêm `thumbnailObjectKey String?` vào PostMedia để `deletePost` xóa cả video lẫn poster S3 (không orphan). Đây là migration DUY NHẤT của 3.2 (các field `thumbnailUrl`/`duration`/enum VIDEO đã có từ Phase 2).
+- **Delete post (frontend)**: `useDeletePost` (optimistic remove khỏi feed+userPosts, snapshot/rollback) + `DeleteConfirmDialog` + `PostActionMenu` (⋯ owner-only) wire vào PostDetailView (KHÔNG ở feed card, giống IG). Backend DELETE + S3 cleanup đã có từ 2.3a.
+- **Change visibility**: `PostActionMenu` thêm RadioGroup PUBLIC/FOLLOWERS/PRIVATE (radix DropdownMenu) → `useUpdatePost` (patch in-place). Backend PATCH /posts/:id đã accept visibility từ 2.3a.
+- **Private account toggle**: `ui/switch` (hand-roll radix) + field `isPrivate` trong `ProfileEditForm`. Backend (`updateProfileSchema.isPrivate` + service spread + gating postsCount/grid) đã sẵn từ 2.5 — frontend chỉ expose UI.
+- Verify code-level: `tsc -b` backend + frontend + `vite build` 0 lỗi; Zod schema unit-check 13/13 (per-type cap + video-standalone refine); OpenAPI build OK.
+
+**Lưu ý kỹ thuật:**
+- **media.schema tách 2**: `presignRequestBaseSchema` (ZodObject, đăng ký OpenAPI) + `presignRequestSchema` (`.superRefine` per-type cap). Lý do: register ZodEffects (sản phẩm của refine) vào zod-to-openapi rủi ro vỡ spec → giữ OpenAPI thấy ZodObject sạch, validation runtime dùng bản refined. Lỗi size gắn `path:['size']` để surface ở `details.size`.
+- **serializePost spread raw `post.media`** (postInclude không `select`) → `thumbnailUrl`/`duration`/`thumbnailObjectKey`/`objectKey` tự có trong response runtime. Hệ quả: chỉ cần persist lúc create + thêm vào type FE + doc schema, KHÔNG đụng serializer. Kèm hệ quả phụ: `objectKey`+`thumbnailObjectKey` leak ra response (xem tech debt).
+- **Composer flow DERIVED** (`video ? 'video' : images.length ? 'image' : null`) thay vì state riêng → 2 holder không drift. `VideoStage` re-key `key={video.id}` như CropStage.
+- **useCreatePost** `MediaPayload = CroppedImage | VideoMedia` discriminate bằng `contentType==='video/mp4'`. Video = **2 PUT tuần tự** (video 0–90% + poster 90–100%) gộp 1 `MediaInput`. `extractVideoThumbnail` đọc từ blob LOCAL (objectURL) → KHÔNG dính CORS.
+- **PostVideo**: `muted` phải sync qua ref effect (React chỉ set `muted` attribute lúc mount, không update). IntersectionObserver threshold 0.5 play/pause; **mỗi instance 1 observer độc lập** (chưa có single-active coordinator). object-contain để video dọc không bị crop (flow video không có bước crop).
+- **useUpdatePost / useDeletePost — lệch spec có chủ ý**: cả hai KHÔNG `invalidateQueries(feed)`. useUpdatePost dùng `patchPostInCaches` replace in-place; useDeletePost optimistic remove + giữ `post(id)` tới onSuccess (tránh flash "not found" trên detail đang mở) + navigate ở onSuccess (không lúc confirm) để onError rollback còn chạy được (component chưa unmount). Lý do chung: invalidate feed → refetch → reshuffle + mất scroll (đã chốt ở 2.4b); post của owner vốn không nằm trong feed của owner.
+- **Switch + DropdownMenu** hand-roll từ `radix-ui` umbrella (v1.4.3, đã export `Switch`/`DropdownMenu`) — KHÔNG thêm dependency.
+- Windows EPERM khi `prisma generate` lúc tsx watch giữ DLL (đã biết từ 2.3b-1) — migrate apply OK, generate phải retry sau khi dev server nhả DLL.
+
+**Tech debt phát sinh (đề xuất BACKLOG, chờ confirm):**
+- `[P3] [backend/posts]` `objectKey` + `thumbnailObjectKey` leak ra response runtime (serializePost spread raw media) — fix bằng media `select` whitelist. (objectKey đã leak từ Phase 2; 3.2 thêm thumbnailObjectKey.)
+- `[P2] [frontend/feed]` Single-active-video coordinator: hiện mỗi `PostVideo` tự play khi ≥50% visible → nhiều video phát đồng thời nếu cùng trong viewport. Cần 1 manager cho phát 1 video tại 1 thời điểm.
+- `[P3] [backend/video]` Transcode pipeline (BullMQ + ffmpeg) đa resolution + poster server-side — production. Hiện upload MP4 gốc, poster client-extract.
+- `[P3] [frontend/video]` Client compress (ffmpeg.wasm) cho video chạm trần 50MB.
+- `[P3] [backend/media]` Orphan S3 khi upload partial fail mở rộng sang video 2-PUT (thumbnail PUT fail sau video PUT → video orphan) — carry-over từ 3.1.
+
+**Next:** Browser-interactive verify 3.2 (video upload/playback + delete + visibility + private) + backend curl (presign caps, POST video, DELETE → MinIO xóa cả 2 object) + CORS playback từ MinIO. Sau đó 3.3 (nested comment/reply); tag `phase-3-complete` khi 3.1+3.2+3.3 xong.
+
+---
+
 ## 2026-06-06 — Checkpoint 3.1: Multi-image carousel (up to 5 photos)
 
 **Done:**

@@ -1,15 +1,17 @@
-import { Link } from 'react-router-dom';
-import { usePost } from '@/features/posts/hooks/usePost';
-import { getStatus } from '@/lib/apiError';
-import { formatRelativeTime } from '@/lib/format';
-import { cn } from '@/lib/utils';
-import Avatar from '@/components/common/Avatar';
-import Spinner from '@/components/common/Spinner';
-import ErrorState from '@/components/common/ErrorState';
-import CommentList from '@/components/comment/CommentList';
-import CommentForm, { COMMENT_INPUT_ID } from '@/components/comment/CommentForm';
-import PostCarousel from './PostCarousel';
-import PostActions from './PostActions';
+import { Link, useNavigate } from "react-router-dom";
+import { usePost } from "@/features/posts/hooks/usePost";
+import { getStatus } from "@/lib/apiError";
+import { formatRelativeTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import Avatar from "@/components/common/Avatar";
+import Spinner from "@/components/common/Spinner";
+import ErrorState from "@/components/common/ErrorState";
+import CommentList from "@/components/comment/CommentList";
+import CommentForm, { COMMENT_INPUT_ID } from "@/components/comment/CommentForm";
+import PostCarousel from "./PostCarousel";
+import PostVideo from "./PostVideo";
+import PostActions from "./PostActions";
+import PostActionMenu from "./PostActionMenu";
 
 interface PostDetailViewProps {
   postId: string;
@@ -19,6 +21,7 @@ interface PostDetailViewProps {
 // mobile/standalone page. Responsive: stacked under `md`, two columns (media |
 // comments) at `md+` with the comments column scrolling internally.
 export default function PostDetailView({ postId }: PostDetailViewProps) {
+  const navigate = useNavigate();
   const { data: post, isLoading, isError, error, refetch } = usePost(postId);
 
   if (isLoading) {
@@ -33,11 +36,11 @@ export default function PostDetailView({ postId }: PostDetailViewProps) {
     const notFound = getStatus(error) === 404;
     return (
       <ErrorState
-        title={notFound ? 'Post not found' : 'Something went wrong'}
+        title={notFound ? "Post not found" : "Something went wrong"}
         message={
           notFound
-            ? 'This post may have been removed or is private.'
-            : 'Failed to load this post.'
+            ? "This post may have been removed or is private."
+            : "Failed to load this post."
         }
         onRetry={notFound ? undefined : () => refetch()}
         className="min-h-[40vh] justify-center"
@@ -48,23 +51,30 @@ export default function PostDetailView({ postId }: PostDetailViewProps) {
   const { author } = post;
   const authorTo = `/users/${author.username}`;
   const hasMedia = post.media.length > 0;
-  const focusComment = () =>
-    document.getElementById(COMMENT_INPUT_ID)?.focus();
+  const focusComment = () => document.getElementById(COMMENT_INPUT_ID)?.focus();
 
   return (
     <div
       className={cn(
-        'md:grid md:max-h-[85vh] md:overflow-hidden',
-        hasMedia && 'md:grid-cols-[minmax(0,1fr)_360px]',
+        "md:grid md:max-h-[85vh] md:overflow-hidden",
+        hasMedia && "md:grid-cols-[minmax(0,1fr)_360px]",
       )}
     >
       {hasMedia && (
         <div className="flex items-center justify-center bg-black">
-          <PostCarousel
-            media={post.media}
-            alt={post.caption ?? `Post by ${author.name}`}
-            className="max-h-[85vh] bg-black"
-          />
+          {post.media[0].type === "VIDEO" ? (
+            <PostVideo
+              media={post.media}
+              alt={post.caption ?? `Post by ${author.name}`}
+              className="max-h-[85vh]"
+            />
+          ) : (
+            <PostCarousel
+              media={post.media}
+              alt={post.caption ?? `Post by ${author.name}`}
+              className="max-h-[85vh] bg-black"
+            />
+          )}
         </div>
       )}
 
@@ -76,6 +86,9 @@ export default function PostDetailView({ postId }: PostDetailViewProps) {
               @{author.username}
             </span>
           </Link>
+          <div className="ml-auto pl-2 md:mr-8">
+            <PostActionMenu post={post} onDeleted={() => navigate(-1)} />
+          </div>
         </header>
 
         {/* Scrollable: caption (as the first entry) + comments */}
@@ -88,10 +101,8 @@ export default function PostDetailView({ postId }: PostDetailViewProps) {
               <div className="min-w-0 flex-1">
                 <Link to={authorTo} className="font-semibold hover:underline">
                   @{author.username}
-                </Link>{' '}
-                <span className="break-words whitespace-pre-line">
-                  {post.caption}
-                </span>
+                </Link>{" "}
+                <span className="break-words whitespace-pre-line">{post.caption}</span>
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {formatRelativeTime(post.createdAt)}
                 </div>

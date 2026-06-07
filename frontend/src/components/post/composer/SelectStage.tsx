@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ImagePlus } from 'lucide-react';
+import { ImagePlus, Film, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,26 +8,44 @@ import {
   getImageDimensions,
   validateMediaFile,
 } from '@/lib/image';
-import { MAX_IMAGES, type ComposerImage } from './types';
+import {
+  VIDEO_MIME,
+  getVideoMetadata,
+  isVideoFile,
+  validateVideoFile,
+} from '@/lib/video';
+import { formatDuration } from '@/lib/format';
+import { MAX_IMAGES, type ComposerImage, type ComposerVideo } from './types';
 import ImageStrip from './ImageStrip';
 
 interface SelectStageProps {
+  flow: 'image' | 'video' | null;
   images: ComposerImage[];
+  video: ComposerVideo | null;
   onAdd: (added: ComposerImage[]) => void;
   onRemove: (id: string) => void;
   onReorder: (from: number, to: number) => void;
+  onPickVideo: (video: ComposerVideo) => void;
+  onClearVideo: () => void;
   onNext: () => void;
 }
 
-// Step 1 — pick / drop up to 5 photos. Validates against the backend contract
-// (5 MIME, 10MB) and measures dimensions BEFORE handing off, so an invalid file
-// never reaches the crop step or costs a presign call. GIF/AVIF can only be
-// posted on their own (they can't be forced to a carousel's shared aspect).
+// Accept both images and a single MP4. The <input> accepts the union; the file
+// type chosen first decides the flow.
+const SELECT_ACCEPT = [ACCEPT_ATTR, ...VIDEO_MIME].join(',');
+
+// Step 1 — pick / drop media. Images go down the multi-image carousel flow (up to
+// 5, validated against the backend contract); a single MP4 goes down the video
+// flow. The two cannot be mixed: a video must be posted on its own.
 export default function SelectStage({
+  flow,
   images,
+  video,
   onAdd,
   onRemove,
   onReorder,
+  onPickVideo,
+  onClearVideo,
   onNext,
 }: SelectStageProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,11 +56,45 @@ export default function SelectStage({
     if (!fileList || fileList.length === 0) return;
     const files = Array.from(fileList);
 
+    // ── Video branch: must be a single MP4, on its own ──
+    if (files.some(isVideoFile)) {
+      if (files.length > 1 || flow === 'image' || images.length > 0) {
+        setError('A video must be posted on its own (no other media).');
+        return;
+      }
+      const file = files[0];
+      const vErr = validateVideoFile(file);
+      if (vErr) {
+        setError(vErr);
+        return;
+      }
+      try {
+        const metadata = await getVideoMetadata(file);
+        onPickVideo({
+          id: crypto.randomUUID(),
+          file,
+          dimensions: { width: metadata.width, height: metadata.height },
+          duration: metadata.duration,
+          prepared: null,
+        });
+        setError(null);
+      } catch {
+        setError('Could not read the video. Try a different file.');
+      }
+      return;
+    }
+
+    // ── Image branch ──
+    if (flow === 'video' || video) {
+      setError('A video must be posted on its own (no other media).');
+      return;
+    }
+
     // 1. Per-file MIME + size validation. One message covers the rejects.
     const valid = files.filter((f) => validateMediaFile(f) === null);
     if (valid.length === 0) {
       setError(
-        'Unsupported file type or too large. Use JPEG, PNG, WebP, GIF, or AVIF up to 10MB.',
+        'Unsupported file type or too large. Use JPEG, PNG, WebP, GIF, or AVIF up to 10MB, or an MP4 up to 50MB.',
       );
       return;
     }
@@ -88,6 +140,41 @@ export default function SelectStage({
     }
   };
 
+  // ── Video selected: confirmation card + Next ──
+  if (flow === 'video' && video) {
+    return (
+      <div className="flex flex-col gap-4 p-6">
+        <div className="flex items-center gap-4 rounded-xl border bg-muted/40 p-4">
+          <div className="grid size-14 shrink-0 place-items-center rounded-lg bg-muted">
+            <Film className="size-6 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{video.file.name}</p>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {formatDuration(video.duration)} · {video.dimensions.width}×
+              {video.dimensions.height}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Remove video"
+            onClick={onClearVideo}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">1 video selected</span>
+          <Button onClick={onNext}>Next</Button>
+        </div>
+      </div>
+    );
+  }
+
   const atCap = images.length >= MAX_IMAGES;
 
   return (
@@ -112,10 +199,12 @@ export default function SelectStage({
         <ImagePlus className="size-12 text-muted-foreground" strokeWidth={1.5} />
         <div>
           <p className="text-sm font-medium">
-            {images.length > 0 ? 'Add more photos' : 'Drag photos here'}
+            {images.length > 0 ? 'Add more photos' : 'Drag photos or a video here'}
           </p>
           <p className="text-xs text-muted-foreground">
-            JPEG, PNG, WebP, GIF, or AVIF · up to 10MB · max {MAX_IMAGES} photos
+            {images.length > 0
+              ? `JPEG, PNG, WebP, GIF, or AVIF · up to 10MB · max ${MAX_IMAGES} photos`
+              : 'Photos (max 5) or one MP4 video · up to 10MB / 50MB'}
           </p>
         </div>
         <Button disabled={atCap} onClick={() => inputRef.current?.click()}>
@@ -124,7 +213,7 @@ export default function SelectStage({
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPT_ATTR}
+          accept={SELECT_ACCEPT}
           multiple
           className="hidden"
           onChange={(e) => {

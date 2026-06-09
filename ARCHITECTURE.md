@@ -546,8 +546,8 @@ GET    /calls/turn-credentials
 | 4.1 Stories Core | 7 | BE module (Story/StoryView + 5 endpoints) + StoryBar data thật + composer slim (9:16 / video ≤15s) + viewer cơ bản | 🟡 Code-complete (chờ migration apply + verify) |
 | 4.2 Stories viewer+ | 7 | Progress bars + gestures (hold/swipe) + auto-advance qua users | ✅ Done |
 | 4.3a Stories overlays | 8 | StoryItem: TEXT + EMOJI (drag) + video edit | ✅ Done |
-| 4.3b Stories overlays | 8 | MENTION/STICKER/TAG + multi-touch scale/rotate | ⏳ |
-| 4.4 Stories archive | 8 | isArchived cron + archive page + profile ring entry + view count/viewers (AudioTrack defer) | ✅ Done |
+| 4.3b Stories overlays | 8 | MENTION/STICKER/TAG + multi-touch scale/rotate | ⏸ Defer (BACKLOG) |
+| 4.4 Stories archive | 8 | isArchived cron 5 phút + archive page + profile ring entry + view count/viewers (AudioTrack defer) | ✅ Done → **Phase 4 complete** |
 | 5. Messaging | 9-12 | 1-1, group, reactions, recall, share | ⏳ |
 | 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |

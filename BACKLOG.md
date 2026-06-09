@@ -38,8 +38,6 @@
 - [P3] [backend/stories] viewCount = `_count.views` aggregate mỗi story kể cả trong
       feed (Checkpoint 4.4) — feed luôn trả `null` (non-owner, no leak) nhưng vẫn chạy
       aggregate per row. Tối ưu (skip aggregate khi không phải owner) nếu feed phình.
-- [P3] [stories] View count KHÔNG realtime (Checkpoint 4.4) — owner refetch/reopen mới
-      thấy count tăng. Realtime qua WebSocket → Phase 5 (messaging mới có socket).
 
 - [ ] [backend/media] Image transform (thumbnail, resize) — Phase 2 chỉ lưu original; thumbnail server-side hoặc on-the-fly cân nhắc Phase polish.
 - [ ] [backend/feed] Feed cải tiến — Phase 2 dùng follow+random simple. Personalized ranking, recency weight, engagement signals → Phase polish.
@@ -60,8 +58,36 @@
       như IG khi có thời gian.
 
 
+## Phase 4.3b — Stories overlays (defer)
+
+- [P3] [frontend/story-overlay] Multi-touch scale/rotate overlays — pinch-zoom + 2-finger
+      rotate cho StoryItem (4.3a chỉ drag; field `scale`/`rotation` đã có DB, default 1/0).
+- [P3] [frontend/story-overlay] MENTION/STICKER/TAG overlay types — enum `StoryItemType` đã
+      khai đủ 5 value (DB) + Zod gate 2 (TEXT/EMOJI); chỉ cần thêm discriminated case Zod +
+      render component (MENTION → link profile, TAG, STICKER picker). KHÔNG enum migration.
+
+## Phase 5+ — defer (cần messaging / socket)
+
+- [P3] [stories] Story reactions (heart/tym) — wire với messaging (reaction → DM owner).
+- [P3] [stories] Reply input ở story viewer (bottom chrome `h-20` hiện placeholder) — wire DM.
+- [P3] [stories] WebSocket realtime view count update (Checkpoint 4.4) — hiện owner
+      refetch/reopen mới thấy count tăng; realtime cần socket (Phase 5).
+
+## Phase polish — Stories
+
+- [P3] [frontend/story-viewer] Mute state lift → store (persist across stories + reset về
+      default mỗi lần mở). Hiện `muted` là component state: KHÔNG persist khi đổi story,
+      KHÔNG reset khi reopen (session trước fallback→muted thì reopen giữ muted).
+- [P3] [frontend/story-viewer] Bottom sheet UI cho ViewersListModal trên mobile — hiện
+      Radix Dialog centered `max-w-md`; IG dùng bottom sheet kéo lên.
+
 ## DONE
 
+- 2026-06-10 [frontend/story-viewer] Bar↔video desync khi reopen video (progress bar chạy
+  nhưng video đứng) — Checkpoint 4.4 follow-up. Fix: thêm `isOpen` vào deps effect video
+  play/pause (viewer không unmount khi close → `currentStory.id` persist → deps không đổi →
+  effect không re-fire → `<video>` remount mới không được gọi `play()`). Bao phủ luôn
+  tech-debt "bar↔video drift" ghi nhận ở 4.2.
 - 2026-06-09 [frontend/story-viewer] Profile-entry-point cho viewer (single-user mode) —
   Checkpoint 4.4. Avatar profile có ring coral khi `hasActiveStory` → mở viewer
   single-user mode. Cross-user OFF. Delete reachable (archive + single-user). 4.2 đã

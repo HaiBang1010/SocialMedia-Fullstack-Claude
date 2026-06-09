@@ -7,7 +7,7 @@
 
 App name: Beng
 
-Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 xong (BACKEND: posts/media/follow/like/comment + feed API; FRONTEND: 2.4a/b/c posts UI + 2.5 follow/profile/public profile). **Phase 3 xong** (3.1 carousel ≤5 ảnh + 3.2 video upload/playback + delete/visibility/private + 3.3 nested comments/replies). **Phase 4 xong** (4.1 Stories Core + 4.2 viewer nâng cao + 4.3a overlays TEXT/EMOJI + 4.4 archive+cron + profile ring entry + view count/viewers list). Còn lại trong Phase 4: 4.3b (MENTION/STICKER/TAG + multi-touch) + AudioTrack (defer). Tiếp theo: Phase 5 messaging.
+Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 xong (BACKEND: posts/media/follow/like/comment + feed API; FRONTEND: 2.4a/b/c posts UI + 2.5 follow/profile/public profile). **Phase 3 xong** (3.1 carousel ≤5 ảnh + 3.2 video upload/playback + delete/visibility/private + 3.3 nested comments/replies). **Phase 4 Stories ✅ COMPLETE** (4.1 Core + 4.2 viewer nâng cao + 4.3a overlays TEXT/EMOJI + 4.4 archive/cron/profile-ring/view-count/viewers). 4.3b (MENTION/STICKER/TAG + multi-touch scale/rotate) + AudioTrack **defer → BACKLOG**. Tiếp theo: Phase 5 messaging.
 
 ## Cấu trúc
 
@@ -88,8 +88,8 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 | 4.1 Stories Core (BE module + StoryBar data thật + composer slim + viewer cơ bản) | ✅ Xong |
 | 4.2 Stories viewer nâng cao (progress bars + gestures + auto-advance qua users) | ✅ Xong |
 | 4.3a Stories overlays (TEXT + EMOJI — StoryItem, drag + video edit) | ✅ Xong |
-| 4.3b Stories overlays (MENTION/STICKER/TAG + multi-touch scale/rotate) | Chưa bắt đầu |
-| 4.4 Stories archive + cron (isArchived cron + archive page + profile ring entry + view count/viewers list) | ✅ Xong (AudioTrack defer) |
+| 4.3b Stories overlays (MENTION/STICKER/TAG + multi-touch scale/rotate) | ⏸ Defer → BACKLOG |
+| 4.4 Stories archive + cron (isArchived cron 5 phút + archive page + profile ring entry + view count/viewers list) | ✅ Xong → **Phase 4 hoàn thành** (4.3b + AudioTrack defer) |
 | 5-7 | Chưa bắt đầu |
 
 Khi bạn (Claude) thấy task ngoài phase hiện tại — hỏi user có muốn skip ahead không.

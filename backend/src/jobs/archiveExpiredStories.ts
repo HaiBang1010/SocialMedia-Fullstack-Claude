@@ -1,6 +1,6 @@
 import * as storiesService from "../modules/stories/stories.service";
 
-// Phase 4.4 — hourly sweep that flips isArchived on stories past their 24h window.
+// Phase 4.4 — periodic sweep (every 5 min) that flips isArchived on stories past their 24h window.
 // setInterval (no cron dependency, keeping the project's "0 new deps" stance). The
 // active-stories queries already hide expired stories via the time filter, so this job
 // is a cleanup/bookkeeping pass (it makes /stories/archive correct), not load-bearing
@@ -10,7 +10,7 @@ const ARCHIVE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes — sweet spot between u
 
 /**
  * Start the archive sweep: runs immediately (covers any window the server was down)
- * then hourly. Failures are logged and swallowed — the job must never crash the app.
+ * then every 5 minutes. Failures are logged and swallowed — the job must never crash the app.
  * Returns the interval handle so the caller can clearInterval on shutdown if desired.
  */
 export function startArchiveJob(): NodeJS.Timeout {
@@ -28,5 +28,5 @@ export function startArchiveJob(): NodeJS.Timeout {
   };
 
   void run(); // immediately on start
-  return setInterval(run);
+  return setInterval(run, ARCHIVE_INTERVAL_MS); // every 5 minutes
 }

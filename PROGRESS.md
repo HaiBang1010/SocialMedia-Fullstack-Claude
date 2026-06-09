@@ -6,6 +6,31 @@
 
 ---
 
+## 2026-06-09 — Checkpoint 4.2: Story viewer nâng cao (progress bars + gestures + cross-user)
+
+**Done (FRONTEND-ONLY, KHÔNG backend/migration; browser verify 15/15 PASS + `tsc -b` + `vite build` 0 lỗi, 1999 modules):**
+- **Progress bars**: `StoryProgressBar`/`StoryProgressBars` (mới) — mỗi story 1 thanh fill tuyến tính qua CSS keyframe `@story-progress` (index.css) + inline `animationDuration`/`animationPlayState`. Active bar `onAnimationEnd → goNext` thay `setTimeout` cũ (nguồn-sự-thật advance). State pending/active/complete theo index.
+- **Gestures**: 1 hook `useStoryGestures` (mới) gộp hold-pause (200ms) / swipe-down dismiss (>100px) / tap 1/3÷2/3 — pointer events + `setPointerCapture` (idiom CropStage), overlay `touch-none` z-10 dưới header/mute/close (z-30/40).
+- **Cross-user auto-advance**: viewer đọc `useStoriesFeed` items[] làm queue, forward-only + gate `isUnseenFlow` (tap ring đã-xem chỉ xem user đó rồi đóng). Gộp `goNext` (bỏ lặp timer-vs-button của 4.1) + 1 init effect + `initializedRef` guard (sửa race 2-effect của 4.1).
+- **Hybrid dual-source (deviation vs plan, user accept)**: FEED mode (cross-user) khi start user có trong feed; SINGLE-USER mode (`useUserStories` fallback, no cross-user) khi không — vá regression composer "View story" (self KHÔNG nằm trong feed → feed-only sẽ mở-rồi-đóng instant). `startInFeed` quyết định nguồn + bật cross-user.
+- **Mute toggle** video (mirror PostVideo ref-sync) + **author avatar/username → `<Link>` profile** (header, `onClick={close}` đóng viewer trước navigate). `storyViewerStore` rename `username → startUsername`.
+
+**Lưu ý kỹ thuật:**
+- **`initializedRef` guard CRITICAL**: optimistic view-mark mutate `items[]` (storiesFeed cache) → thiếu guard thì init effect re-run giữa chừng → reset index. Guard reset chỉ khi `isOpen` false→true.
+- **Progress pause**: class `animate-story-progress` PHẢI giữ cố định, CHỈ đổi `animationPlayState` inline; thêm/xoá class theo isPaused → animation restart từ 0. `animation-play-state:paused` freeze → resume đúng chỗ miễn phí.
+- **1 gesture hook (không 2)**: không spread được 2 `onPointerDown` lên cùng element. `finish()` đọc ref (`deltaYRef`/`pausedRef`) không đọc state → tránh stale-closure delta ở pointerup. `onPointerCancel` riêng (cleanup, không nav).
+- **Hybrid hệ quả**: feed loại self → `isOwner` Delete chỉ reachable ở single-user mode (self-after-post); `currentStory.author.username` dùng chung cho mark-viewed/delete cả 2 mode (không cần `currentUser`).
+- **@keyframes ở index.css** (Tailwind v4 CSS-first, không config.js) cạnh `.scrollbar-hide`; `forwards` giữ 100% trước khi React đổi state (tránh nháy về 0).
+- **author Link `onClick={close}` đồng bộ** trong click event, RR navigate cùng event → không race; body-scroll-lock cleanup khi `isOpen` false.
+
+**Tech debt phát sinh (đề xuất BACKLOG — chờ confirm):**
+- `[P3] [frontend/story-viewer]` BACKLOG entry "profile-entry-point single-user" hiện uncommitted **partially obsolete**: data-source fallback (useUserStories) ĐÃ làm trong 4.2; còn lại = (a) UI entry point từ profile page mở viewer own-stories, (b) verify cross-user-delete khi user rỗng (vẫn unreachable). Đề xuất rewrite entry.
+- `[P3] [frontend/story-viewer]` Bar↔video drift khi video buffer (bar duration = `story.duration` cố định, video playback có thể stutter) — chấp nhận (Option A, bar = nguồn-sự-thật); `onEnded` backup.
+
+**Next:** Commit 4.2 thẳng main (`feat: story viewer advanced — progress/gestures/cross-user`). Sau đó 4.3 (overlays StoryItem) hoặc polish profile-entry-point. Migration 4.1 đã apply (browser verify chạy được data thật).
+
+---
+
 ## 2026-06-08 — Checkpoint 4.1: Stories Core (backend + StoryBar data thật + composer slim + viewer)
 
 **Done (migration applied + `tsc` BE+FE + `vite build` 0 lỗi, 1996 modules + backend smoke 26/26):**

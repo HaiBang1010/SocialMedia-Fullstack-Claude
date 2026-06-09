@@ -14,7 +14,9 @@
       "Bash(node -e ' *)",
       "Bash(npx tsx *)",
       "Bash(curl -s --retry 20 --retry-delay 1 --retry-connrefused http://localhost:3000/health)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(npm --prefix \"D:/haibang/Social Media/frontend\" run lint)",
+      "Bash(echo \"---exit:$?---\")"
     ]
   }
 }

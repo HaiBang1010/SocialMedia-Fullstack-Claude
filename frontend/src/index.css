@@ -162,3 +162,14 @@
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
 }
+
+/* Story viewer progress fill (Phase 4.2). Width 0→100% over the story duration;
+   `forwards` holds 100% so it doesn't flash back before the next story mounts.
+   Duration + play-state (hold-to-pause) are set inline per StoryProgressBar. */
+@keyframes story-progress {
+    from { width: 0% }
+    to { width: 100% }
+}
+.animate-story-progress {
+    animation: story-progress linear forwards;
+}

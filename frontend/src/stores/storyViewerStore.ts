@@ -1,18 +1,19 @@
 import { create } from 'zustand';
 
-// Controls the full-screen story viewer. Holds which author's stories to show;
-// the viewer fetches that user's active stories via useUserStories(username).
-// AppLayout renders a single <StoryViewer/> bound to isOpen.
+// Controls the full-screen story viewer. Holds the author whose ring was tapped
+// (the queue's starting point); the viewer reads the grouped stories feed
+// (useStoriesFeed) and advances across users from there. AppLayout renders a
+// single <StoryViewer/> bound to isOpen.
 interface StoryViewerState {
   isOpen: boolean;
-  username: string | null;
-  open: (username: string) => void;
+  startUsername: string | null;
+  open: (startUsername: string) => void;
   close: () => void;
 }
 
 export const useStoryViewerStore = create<StoryViewerState>()((set) => ({
   isOpen: false,
-  username: null,
-  open: (username) => set({ isOpen: true, username }),
-  close: () => set({ isOpen: false, username: null }),
+  startUsername: null,
+  open: (startUsername) => set({ isOpen: true, startUsername }),
+  close: () => set({ isOpen: false, startUsername: null }),
 }));

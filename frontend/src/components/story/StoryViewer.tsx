@@ -1,67 +1,136 @@
-import { useEffect, useRef, useState } from 'react';
-import { Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Avatar from '@/components/common/Avatar';
 import Spinner from '@/components/common/Spinner';
+import StoryProgressBars from './StoryProgressBars';
 import { useStoryViewerStore } from '@/stores/storyViewerStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useStoriesFeed } from '@/features/stories/hooks/useStoriesFeed';
 import { useUserStories } from '@/features/stories/hooks/useUserStories';
 import { useViewStory } from '@/features/stories/hooks/useViewStory';
 import { useDeleteStory } from '@/features/stories/hooks/useDeleteStory';
+import { useStoryGestures } from '@/hooks/useStoryGestures';
 import { formatRelativeTime } from '@/lib/format';
 
-// Auto-advance: images show for 5s, videos for their clip length (with onEnded as
-// a backup). Detailed timed progress bars + gestures (hold-pause, swipe) arrive
-// in Phase 4.2; this is the minimal viewer.
-const IMAGE_DURATION_MS = 5000;
-
 // Full-screen story viewer — a single instance mounted in AppLayout, driven by
-// storyViewerStore. Hand-rolled fixed overlay (not Radix Dialog) so Phase 4.2 can
-// add gestures without fighting a focus trap; we lock body scroll + handle ESC here.
+// storyViewerStore. Hand-rolled fixed overlay (not Radix Dialog) so gestures
+// don't fight a focus trap; we lock body scroll + handle ESC here.
+//
+// Hybrid data source (Phase 4.2):
+//   • FEED mode — opened from a ring in StoryBar. Reads the grouped stories feed
+//     (each item already carries that author's full stories[]), so advancing
+//     across users is instant with no per-user fetch.
+//   • SINGLE-USER mode — the start user isn't in the feed (the feed excludes self,
+//     so this covers "View story" after posting). Falls back to GET
+//     /users/:username/stories. No cross-user advance — closes at the end.
+//
+// Phase 4.2 also adds timed progress bars + hold-to-pause / swipe-to-dismiss /
+// tap-nav gestures.
 export default function StoryViewer() {
   const isOpen = useStoryViewerStore((s) => s.isOpen);
-  const username = useStoryViewerStore((s) => s.username);
+  const startUsername = useStoryViewerStore((s) => s.startUsername);
   const close = useStoryViewerStore((s) => s.close);
   const me = useAuthStore((s) => s.user);
 
-  const { data: stories, isLoading } = useUserStories(username, isOpen);
+  const { data: feedItems, isLoading: feedLoading } = useStoriesFeed();
   const { view } = useViewStory();
   const { remove } = useDeleteStory();
 
-  const [index, setIndex] = useState(0);
-  const startedRef = useRef(false);
+  // -1 = not yet initialized (FEED mode sets the real index). Single-user mode
+  // leaves it at -1 and reads stories from useUserStories instead.
+  const [currentUserIndex, setCurrentUserIndex] = useState(-1);
+  const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
+  const [isUnseenFlow, setIsUnseenFlow] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const initializedRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const total = stories?.length ?? 0;
-  const current = stories?.[index];
+  const feedUser = currentUserIndex >= 0 ? feedItems?.[currentUserIndex] : undefined;
 
-  const goNext = () => {
-    if (index + 1 < total) setIndex(index + 1);
-    else close();
-  };
-  const goPrev = () => {
-    if (index > 0) setIndex(index - 1);
-  };
+  // Single-user fallback: only when the start user isn't in the loaded feed.
+  const startInFeed = !!feedItems?.some((it) => it.user.username === startUsername);
+  const singleEnabled = isOpen && !!startUsername && feedItems !== undefined && !startInFeed;
+  const { data: singleStories, isLoading: singleLoading } = useUserStories(
+    startUsername,
+    singleEnabled,
+  );
 
-  // Reset cursor when switching users / closing.
-  useEffect(() => {
-    startedRef.current = false;
-    setIndex(0);
-  }, [username]);
+  const stories = feedUser ? feedUser.stories : singleEnabled ? singleStories : undefined;
+  const currentStory = stories?.[currentStoryIndex];
+  const isLoading = feedLoading || (singleEnabled && singleLoading);
 
-  // Start at the first unseen story once they load (fallback to the first).
-  useEffect(() => {
-    if (!startedRef.current && stories && stories.length > 0) {
-      const firstUnseen = stories.findIndex((s) => !s.isViewedByMe);
-      setIndex(firstUnseen === -1 ? 0 : firstUnseen);
-      startedRef.current = true;
+  // Advance: next story → else (FEED + unseen flow) the next user with unseen
+  // stories → else close. Forward-only + gated on isUnseenFlow matches IG: tapping
+  // an already-seen ring (or viewing your own) shows just that set, then closes.
+  // The feed's hasUnseenStory flags flip as we view (optimistic cache) WITHOUT
+  // reordering, so the "next unseen" search stays correct and indices stay stable.
+  const goNext = useCallback(() => {
+    if (!stories) return;
+    if (currentStoryIndex < stories.length - 1) {
+      setCurrentStoryIndex((i) => i + 1);
+      return;
     }
-  }, [stories]);
+    if (isUnseenFlow && feedItems && currentUserIndex >= 0) {
+      const next = feedItems.findIndex(
+        (it, idx) => idx > currentUserIndex && it.hasUnseenStory,
+      );
+      if (next !== -1) {
+        setCurrentUserIndex(next);
+        setCurrentStoryIndex(0);
+        return;
+      }
+    }
+    close();
+  }, [stories, currentStoryIndex, isUnseenFlow, feedItems, currentUserIndex, close]);
 
-  // Nothing active for this user → close.
+  const goPrev = useCallback(() => {
+    setCurrentStoryIndex((i) => (i > 0 ? i - 1 : i));
+  }, []);
+
+  const gestures = useStoryGestures({
+    onPrev: goPrev,
+    onNext: goNext,
+    onPause: () => undefined, // pause state is read off gestures.isPaused
+    onResume: () => undefined,
+    onDismiss: close,
+  });
+
+  // Initialize once per open: pick the data source + jump to the first unseen
+  // story. Guarded by initializedRef so the optimistic view-mark mutating the
+  // caches doesn't reset our position mid-viewing. Resets when the viewer closes.
   useEffect(() => {
-    if (isOpen && stories && stories.length === 0) close();
-  }, [isOpen, stories, close]);
+    if (!isOpen) {
+      initializedRef.current = false;
+      setCurrentUserIndex((i) => (i === -1 ? i : -1));
+      return;
+    }
+    if (initializedRef.current) return;
+    if (feedItems === undefined) return; // wait for the feed query to resolve
+
+    const uIdx = feedItems.findIndex((it) => it.user.username === startUsername);
+    if (uIdx !== -1) {
+      // FEED mode — cross-user enabled.
+      const firstUnseen = feedItems[uIdx].stories.findIndex((s) => !s.isViewedByMe);
+      setCurrentUserIndex(uIdx);
+      setCurrentStoryIndex(firstUnseen === -1 ? 0 : firstUnseen);
+      setIsUnseenFlow(feedItems[uIdx].hasUnseenStory);
+      initializedRef.current = true;
+      return;
+    }
+    // SINGLE-USER mode — wait for the user's stories, then start (no cross-user).
+    if (singleStories === undefined) return;
+    if (singleStories.length === 0) {
+      close();
+      return;
+    }
+    const firstUnseen = singleStories.findIndex((s) => !s.isViewedByMe);
+    setCurrentUserIndex(-1);
+    setCurrentStoryIndex(firstUnseen === -1 ? 0 : firstUnseen);
+    setIsUnseenFlow(false);
+    initializedRef.current = true;
+  }, [isOpen, feedItems, singleStories, startUsername, close]);
 
   // Body scroll lock + ESC while open.
   useEffect(() => {
@@ -79,58 +148,52 @@ export default function StoryViewer() {
   }, [isOpen, close]);
 
   // Mark the current story seen (idempotent). Skipped for already-seen stories so
-  // the effect doesn't re-fire after the optimistic cache flip.
+  // it doesn't re-fire after the optimistic cache flip. The author's username
+  // tells the cache which userStories list to patch (works in both modes).
   useEffect(() => {
-    if (isOpen && current && username && !current.isViewedByMe) {
-      view({ storyId: current.id, username });
+    if (isOpen && currentStory && !currentStory.isViewedByMe) {
+      view({ storyId: currentStory.id, username: currentStory.author.username });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, current?.id]);
+  }, [isOpen, currentStory?.id]);
 
-  // Auto-advance timer keyed on the current story.
-  useEffect(() => {
-    if (!isOpen || !current) return;
-    const ms =
-      current.mediaType === 'VIDEO'
-        ? current.duration
-          ? current.duration * 1000
-          : 15000
-        : IMAGE_DURATION_MS;
-    const t = setTimeout(() => {
-      if (index + 1 < total) setIndex(index + 1);
-      else close();
-    }, ms + 200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, current?.id, index, total]);
-
-  // Try to play videos with sound (opening the viewer was a user gesture); fall
-  // back to muted autoplay if the browser blocks it.
+  // Video playback: pause on hold, otherwise play (with sound first — opening the
+  // viewer was a user gesture — then fall back to muted autoplay if blocked).
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
-    v.muted = false;
+    if (!v || currentStory?.mediaType !== 'VIDEO') return;
+    if (gestures.isPaused) {
+      v.pause();
+      return;
+    }
     v.play().catch(() => {
+      setMuted(true);
       v.muted = true;
       v.play().catch(() => undefined);
     });
-  }, [current?.id]);
+  }, [currentStory?.id, currentStory?.mediaType, gestures.isPaused]);
+
+  // React only sets the `muted` attribute on mount, not on updates — sync the DOM
+  // property so the toggle (and a freshly mounted video) honor the preference.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted;
+  }, [muted, currentStory?.id]);
 
   if (!isOpen) return null;
 
-  const isOwner = !!me && !!current && me.id === current.authorId;
+  const isOwner = !!me && !!currentStory && me.id === currentStory.authorId;
 
   const handleDelete = () => {
-    if (!current || !username) return;
-    const wasLast = total <= 1;
-    remove({ storyId: current.id, username });
-    if (wasLast) {
+    if (!currentStory || !stories) return;
+    const count = stories.length;
+    remove({ storyId: currentStory.id, username: currentStory.author.username });
+    if (count <= 1) {
       close();
-    } else if (index >= total - 1) {
+    } else if (currentStoryIndex >= count - 1) {
       // Deleting the last story: step back so we land on the new last item.
-      setIndex(total - 2);
+      setCurrentStoryIndex(count - 2);
     }
-    // Otherwise the next story shifts into the current index automatically.
+    // Otherwise the next story shifts into the current index as the cache shrinks.
   };
 
   return (
@@ -139,56 +202,65 @@ export default function StoryViewer() {
         type="button"
         aria-label="Close"
         onClick={close}
-        className="absolute top-4 right-4 z-30 grid size-9 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+        className="absolute top-4 right-4 z-40 grid size-9 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
       >
         <X className="size-5" />
       </button>
 
-      <div className="relative h-full w-full max-w-md overflow-hidden bg-neutral-900">
-        {isLoading || !current ? (
+      <div
+        className={cn(
+          'relative h-full w-full max-w-md overflow-hidden bg-neutral-900',
+          !gestures.isDragging && 'transition-transform duration-200',
+        )}
+        style={{
+          transform: `translateY(${gestures.translateY}px)`,
+          opacity: 1 - Math.min(gestures.translateY / 400, 0.6),
+        }}
+      >
+        {isLoading || !currentStory || !stories ? (
           <div className="grid size-full place-items-center">
             <Spinner />
           </div>
         ) : (
           <>
-            {current.mediaType === 'VIDEO' ? (
+            {currentStory.mediaType === 'VIDEO' ? (
               <video
-                key={current.id}
+                key={currentStory.id}
                 ref={videoRef}
-                src={current.mediaUrl}
-                poster={current.thumbnailUrl ?? undefined}
+                src={currentStory.mediaUrl}
+                poster={currentStory.thumbnailUrl ?? undefined}
+                muted={muted}
                 playsInline
-                autoPlay
                 onEnded={goNext}
                 className="absolute inset-0 size-full object-contain"
               />
             ) : (
               <img
-                src={current.mediaUrl}
+                src={currentStory.mediaUrl}
                 alt=""
                 className="absolute inset-0 size-full object-cover"
               />
             )}
 
-            {/* Position indicators (timed fill animation arrives Phase 4.2). */}
-            <div className="absolute inset-x-2 top-2 z-20 flex gap-1">
-              {stories!.map((s, i) => (
-                <span
-                  key={s.id}
-                  className={cn(
-                    'h-0.5 flex-1 rounded-full',
-                    i <= index ? 'bg-white' : 'bg-white/35',
-                  )}
-                />
-              ))}
-            </div>
+            <StoryProgressBars
+              stories={stories}
+              currentIndex={currentStoryIndex}
+              isPaused={gestures.isPaused}
+              onComplete={goNext}
+            />
 
             {/* Header */}
-            <div className="absolute inset-x-3 top-5 z-20 flex items-center gap-2 text-white">
-              <Avatar user={current.author} size="sm" className="ring-2 ring-white/70" />
-              <span className="text-sm font-medium">{current.author.username}</span>
+            <div className="absolute inset-x-3 top-5 z-30 flex items-center gap-2 text-white">
+              <Link
+                to={`/users/${currentStory.author.username}`}
+                onClick={close}
+                className="flex min-w-0 items-center gap-2 transition-opacity hover:opacity-80"
+              >
+                <Avatar user={currentStory.author} size="sm" className="ring-2 ring-white/70" />
+                <span className="text-sm font-medium">{currentStory.author.username}</span>
+              </Link>
               <span className="text-xs text-white/70">
-                {formatRelativeTime(current.createdAt)}
+                {formatRelativeTime(currentStory.createdAt)}
               </span>
               {isOwner && (
                 <button
@@ -202,19 +274,23 @@ export default function StoryViewer() {
               )}
             </div>
 
-            {/* Tap zones: left third = previous, right two-thirds = next. */}
-            <button
-              type="button"
-              aria-label="Previous story"
-              onClick={goPrev}
-              className="absolute inset-y-0 left-0 z-10 w-1/3 cursor-default focus:outline-none"
-            />
-            <button
-              type="button"
-              aria-label="Next story"
-              onClick={goNext}
-              className="absolute inset-y-0 right-0 z-10 w-2/3 cursor-default focus:outline-none"
-            />
+            {/* Mute toggle (video only). */}
+            {currentStory.mediaType === 'VIDEO' && (
+              <button
+                type="button"
+                aria-label={muted ? 'Unmute' : 'Mute'}
+                onClick={() => setMuted((m) => !m)}
+                className="absolute right-3 bottom-3 z-30 grid size-9 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+              >
+                {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+              </button>
+            )}
+
+            {/* Gesture layer: hold-pause / swipe-down / tap-nav. Sits above the
+                media but below the header, mute, and close buttons (higher z,
+                siblings) so tapping those never reaches it. touch-none keeps
+                mobile scroll/pull-refresh from stealing the gesture. */}
+            <div className="absolute inset-0 z-10 touch-none" {...gestures.handlers} />
           </>
         )}
       </div>

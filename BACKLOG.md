@@ -32,6 +32,13 @@
 - [P3] [frontend/feed] useFeed nhận custom limit khi cần (vd discover feed).
   Hiện tại no-arg, dùng backend default 20.
 
+  - [P3] [frontend/story-viewer] Profile-entry-point cho viewer (single-user mode):
+  Mở viewer từ profile page với own stories. Phải wire:
+  (a) useUserStories(me.username) thay useStoriesFeed
+  (b) Cross-user advance OFF (single user only)
+  (c) Delete button reachable + verify cross-user delete logic (currently 
+      unreachable trong feed flow)
+
 - [ ] [backend/media] Image transform (thumbnail, resize) — Phase 2 chỉ lưu original; thumbnail server-side hoặc on-the-fly cân nhắc Phase polish.
 - [ ] [backend/feed] Feed cải tiến — Phase 2 dùng follow+random simple. Personalized ranking, recency weight, engagement signals → Phase polish.
 - [ ] [backend/storage] Automate MinIO setup — viết script bash hoặc 

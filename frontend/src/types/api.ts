@@ -36,6 +36,7 @@ export interface ProfileUser extends PublicUser {
   followersCount: number;
   followingCount: number;
   isFollowing: boolean | null;
+  hasActiveStory: boolean; // Phase 4.4 — story ring on the profile avatar
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────
@@ -178,6 +179,7 @@ export interface Story {
   author: PublicUser;
   isViewedByMe: boolean;
   items: StoryItem[]; // Phase 4.3a overlays ([] for 4.1/4.2 stories)
+  viewCount: number | null; // Phase 4.4 — owner-only; null for non-owners (no leak)
 }
 
 // GET /stories/feed — active stories of followed users, grouped by author.
@@ -194,6 +196,23 @@ export interface StoryFeedResponse {
 // GET /users/:username/stories — one user's active stories.
 export interface UserStoriesResponse {
   stories: Story[];
+}
+
+// GET /stories/archive — the viewer's own archived stories, cursor-paginated.
+export interface ArchivedStoriesResponse {
+  stories: Story[];
+  nextCursor: string | null;
+}
+
+// GET /stories/:id/views — one viewer entry (owner-only list).
+export interface ViewerEntry {
+  user: PublicUser;
+  viewedAt: string; // ISO
+}
+
+export interface ViewersListResponse {
+  viewers: ViewerEntry[];
+  nextCursor: string | null;
 }
 
 // ── Likes / Follows ────────────────────────────────────────────────────

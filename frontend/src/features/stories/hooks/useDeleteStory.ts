@@ -25,6 +25,7 @@ export function useDeleteStory() {
       await Promise.all([
         qc.cancelQueries({ queryKey: queryKeys.storiesFeed() }),
         qc.cancelQueries({ queryKey: queryKeys.userStories(username) }),
+        qc.cancelQueries({ queryKey: queryKeys.archivedStories() }),
       ]);
       const snapshot = snapshotStoryCaches(qc, username);
       removeStoryFromCaches(qc, username, storyId);

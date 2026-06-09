@@ -7,6 +7,7 @@ import { env } from '../../config/env';
 import { publicUserSelect } from '../users/users.service';
 import { isFollowing } from '../follows/follows.service';
 import type { CreateStoryInput } from './stories.schema';
+import type { PaginationInput } from '../posts/posts.schema';
 
 // Stories expire 24h after creation (see ARCHITECTURE §6). The expiry cron that
 // flips isArchived arrives in Phase 4.4; until then the time filter alone hides
@@ -22,6 +23,8 @@ const storyInclude = {
     select: { id: true, type: true, x: true, y: true, scale: true, rotation: true, payload: true },
     orderBy: { id: 'asc' },
   },
+  // Phase 4.4 — view count. Owner-only at serialize time (never leaked to non-owners).
+  _count: { select: { views: true } },
 } satisfies Prisma.StoryInclude;
 
 type StoryRow = Prisma.StoryGetPayload<{ include: typeof storyInclude }>;
@@ -30,8 +33,13 @@ type StoryRow = Prisma.StoryGetPayload<{ include: typeof storyInclude }>;
  * Transform a Prisma story into the API DTO. WHITELIST: never leak mediaObjectKey /
  * thumbnailObjectKey (S3 internals) — unlike serializePost which spreads raw media.
  * author keeps its Date — res.json() serializes to ISO at the HTTP layer (project convention).
+ *
+ * viewCount is OWNER-ONLY (Phase 4.4): null for non-owners so feed / other-users responses
+ * never leak how many people viewed someone else's story. Callers thread viewerId; the feed
+ * excludes self, so feed always yields null here.
  */
-function serializeStory(story: StoryRow, options: { isViewedByMe: boolean }) {
+function serializeStory(story: StoryRow, options: { isViewedByMe: boolean; viewerId?: string }) {
+  const isOwner = !!options.viewerId && story.authorId === options.viewerId;
   return {
     id: story.id,
     authorId: story.authorId,
@@ -54,6 +62,7 @@ function serializeStory(story: StoryRow, options: { isViewedByMe: boolean }) {
       payload: i.payload,
     })),
     isViewedByMe: options.isViewedByMe,
+    viewCount: isOwner ? story._count.views : null,
   };
 }
 
@@ -101,8 +110,8 @@ export async function createStory(authorId: string, input: CreateStoryInput) {
     include: storyInclude,
   });
 
-  // Author's own brand-new story → not yet viewed.
-  return serializeStory(story, { isViewedByMe: false });
+  // Author's own brand-new story → not yet viewed, owner sees viewCount 0.
+  return serializeStory(story, { isViewedByMe: false, viewerId: authorId });
 }
 
 /**
@@ -149,7 +158,8 @@ export async function getStoriesFeed(viewerId: string) {
 
   const grouped = [...groups.values()].map((group) => {
     const serialized = group.stories.map((s) =>
-      serializeStory(s, { isViewedByMe: seen.has(s.id) }),
+      // viewerId never equals the author here (feed excludes self) → viewCount stays null.
+      serializeStory(s, { isViewedByMe: seen.has(s.id), viewerId }),
     );
     return {
       user: group.user,
@@ -213,22 +223,28 @@ export async function listStoriesByUsername(username: string, viewerId?: string)
     : new Set<string>();
 
   return {
-    stories: stories.map((s) => serializeStory(s, { isViewedByMe: seen.has(s.id) })),
+    // Owner viewing own stories → viewCount numbers; non-owner → null.
+    stories: stories.map((s) => serializeStory(s, { isViewedByMe: seen.has(s.id), viewerId })),
   };
 }
 
 /**
  * Mark a story as viewed by the viewer. Idempotent (upsert on the composite PK).
  * 404 if the story doesn't exist or is no longer active (expired/archived).
+ * The author viewing their own story is NOT recorded (IG behavior) — keeps the
+ * owner out of the viewers list + viewCount.
  */
 export async function markStoryViewed(storyId: string, viewerId: string): Promise<void> {
   const story = await prisma.story.findUnique({
     where: { id: storyId },
-    select: { expiresAt: true, isArchived: true },
+    select: { authorId: true, expiresAt: true, isArchived: true },
   });
   if (!story || story.isArchived || story.expiresAt <= new Date()) {
     throw new AppError(404, 'StoryNotFound', 'Story not found');
   }
+
+  // A self-view doesn't count — never record the author as a viewer of their own story.
+  if (story.authorId === viewerId) return;
 
   await prisma.storyView.upsert({
     where: { storyId_viewerId: { storyId, viewerId } },
@@ -266,4 +282,87 @@ export async function deleteStory(storyId: string, userId: string): Promise<void
       console.error(`[deleteStory] Failed to delete S3 object ${key}:`, err);
     }
   }
+}
+
+/**
+ * Cron sweep (Phase 4.4): flip isArchived on stories whose 24h window has passed.
+ * Idempotent — the `isArchived: false` guard means an already-archived story is never
+ * touched twice. Returns the number of rows archived (for the job's log line).
+ */
+export async function archiveExpiredStories(): Promise<{ count: number }> {
+  const { count } = await prisma.story.updateMany({
+    where: { isArchived: false, expiresAt: { lt: new Date() } },
+    data: { isArchived: true },
+  });
+  return { count };
+}
+
+/**
+ * The viewer's own archived stories (GET /stories/archive). Newest-first, cursor on id
+ * (mirrors listPostsByUsername). Always the owner → viewCount is populated.
+ */
+export async function listArchivedStories(userId: string, pagination: PaginationInput) {
+  const { cursor, limit } = pagination;
+
+  const rows = await prisma.story.findMany({
+    where: { authorId: userId, isArchived: true },
+    include: storyInclude,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+  });
+
+  const hasMore = rows.length > limit;
+  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? slice[slice.length - 1]!.id : null;
+
+  return {
+    stories: slice.map((s) =>
+      // Archived stories are always seen; owner always sees viewCount.
+      serializeStory(s, { isViewedByMe: true, viewerId: userId }),
+    ),
+    nextCursor,
+  };
+}
+
+/**
+ * List who viewed a story (GET /stories/:id/views) — OWNER ONLY. Most-recent first.
+ * Composite-PK cursor on viewerId (mirrors listFollowers), backed by the
+ * [storyId, viewedAt desc] index. Does NOT filter active: an owner must be able to see
+ * the viewers of an already-archived story.
+ */
+export async function listStoryViewers(
+  storyId: string,
+  viewerId: string,
+  pagination: PaginationInput,
+) {
+  const story = await prisma.story.findUnique({
+    where: { id: storyId },
+    select: { authorId: true },
+  });
+  if (!story) {
+    throw new AppError(404, 'StoryNotFound', 'Story not found');
+  }
+  if (story.authorId !== viewerId) {
+    throw new AppError(403, 'Forbidden', 'You can only see viewers of your own stories');
+  }
+
+  const { cursor, limit } = pagination;
+
+  const rows = await prisma.storyView.findMany({
+    where: { storyId },
+    include: { viewer: { select: publicUserSelect } },
+    orderBy: { viewedAt: 'desc' },
+    take: limit + 1,
+    ...(cursor ? { cursor: { storyId_viewerId: { storyId, viewerId: cursor } }, skip: 1 } : {}),
+  });
+
+  const hasMore = rows.length > limit;
+  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? slice[slice.length - 1]!.viewerId : null;
+
+  return {
+    viewers: slice.map((r) => ({ user: r.viewer, viewedAt: r.viewedAt.toISOString() })),
+    nextCursor,
+  };
 }

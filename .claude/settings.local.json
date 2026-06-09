@@ -26,7 +26,14 @@
       "Bash(curl -s --retry 30 --retry-delay 1 --retry-connrefused http://localhost:3000/docs/json)",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const d=JSON.parse\\(s\\);console.log\\('paths:',Object.keys\\(d.paths\\).length\\);console.log\\('StoryItem present:',!!d.components.schemas.StoryItem\\);console.log\\('Story.items present:',!!d.components.schemas.Story?.properties?.items\\);const it=d.components.schemas.CreateStoryRequest?.properties?.items;console.log\\('CreateStoryRequest.items.items:',JSON.stringify\\(it?.items\\)?.slice\\(0,160\\)\\);}catch\\(e\\){console.log\\('PARSE FAIL:',e.message\\);console.log\\('RAW:',s.slice\\(0,200\\)\\);}}\\)\")",
       "Bash(echo \"exit $?\")",
-      "Bash(node \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\story-smoke.mjs\")"
+      "Bash(node \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\story-smoke.mjs\")",
+      "Bash(node -e \"require\\('tsx/cjs'\\); const { buildOpenApiDocument } = require\\('./src/lib/openapi.ts'\\); const doc = buildOpenApiDocument\\(\\); const paths = Object.keys\\(doc.paths\\); console.log\\('PATH COUNT:', paths.length\\); const stories = paths.filter\\(p => p.includes\\('stories'\\) || p.includes\\('archive'\\)\\); console.log\\('STORY PATHS:'\\); stories.forEach\\(p => console.log\\('  ', p, '->', Object.keys\\(doc.paths[p]\\).join\\(','\\)\\)\\);\")",
+      "Bash(npx vite *)",
+      "Bash(curl -s -o /dev/null -w \"health=%{http_code}\\\\n\" http://localhost:3000/health)",
+      "Bash(curl -s -o /dev/null -w \"stories/archive \\(no auth, expect 401\\)=%{http_code}\\\\n\" http://localhost:3000/stories/archive)",
+      "Bash(curl -s -o /dev/null -w \"stories/x/views \\(no auth, expect 401\\)=%{http_code}\\\\n\" http://localhost:3000/stories/xyz/views)",
+      "Bash(ls smoke_*.*)",
+      "Bash(git -C \"D:\\\\haibang\\\\Social Media\" status --short)"
     ]
   }
 }

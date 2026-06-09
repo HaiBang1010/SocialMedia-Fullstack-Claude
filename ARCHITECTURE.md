@@ -374,6 +374,8 @@ enum NotificationType { LIKE COMMENT FOLLOW MENTION MESSAGE STORY_VIEW }
 > - **KHÔNG cột `visibility`** — privacy ở user-level (private account + non-follower → ẩn). **KHÔNG** `audioTrackId`/`audioTrack`/`items` relation — `StoryItem` + `AudioTrack` defer 4.3/4.4, nên Story 4.1 chỉ có `author` + `views`.
 > - `StoryView` thêm **`viewer User @relation`** (FULL FK, KHÁC plan để `viewerId` trơ) + `@@index([viewerId])`; `@@id([storyId, viewerId])` (upsert idempotent). `User` thêm `stories Story[]` + `storyViews StoryView[]`.
 > - `expiresAt = now()+24h` (set backend lúc create). Active = `expiresAt > now AND isArchived = false`. Cron flip `isArchived` → Phase 4.4.
+>
+> **Phase 4.4 addendum:** `StoryView` thêm `@@index([storyId, viewedAt(sort: Desc)])` (backing viewers-list cursor). Cron `archiveExpiredStories` (setInterval 1h, `server.ts`) flip `isArchived`. `Story` response thêm `viewCount` (owner-only, null cho non-owner — feed loại self nên luôn null). `getUserProfile` thêm `hasActiveStory` (drive story ring trên profile avatar). KHÔNG model mới, chỉ 1 index additive.
 
 ---
 
@@ -413,12 +415,14 @@ DELETE /users/:id/follow
 GET    /users/:id/followers
 GET    /users/:id/following
 
-# Stories (Phase 4)
-GET    /stories/feed
-POST   /stories
-GET    /stories/:id
-POST   /stories/:id/view
-GET    /users/me/stories/archive
+# Stories (Phase 4 — ACTUAL, khác plan ở vài route)
+POST   /stories                       # create (image/video + overlay items[])
+GET    /stories/feed                  # following users' active stories, grouped
+GET    /users/:username/stories       # one user's active stories (KHÔNG GET /stories/:id như plan)
+POST   /stories/:id/view              # mark viewed → 204
+DELETE /stories/:id                   # owner only → 204
+GET    /stories/archive               # 4.4 — own archived (NOT /users/me/... — tránh username="me")
+GET    /stories/:id/views             # 4.4 — viewers list (owner only, 403 else)
 
 # Conversations & Messages (Phase 5)
 GET    /conversations
@@ -491,7 +495,7 @@ GET    /calls/turn-credentials
 ### Stories: time-based filter, soft archive
 - Tạo: `expiresAt = now() + 24h`.
 - Active query: `WHERE expiresAt > NOW() AND isArchived = false`.
-- Cron mỗi giờ: `UPDATE WHERE expiresAt < NOW() SET isArchived = true`.
+- Cron mỗi 5 phút (`src/jobs/archiveExpiredStories.ts`, Phase 4.4): `UPDATE WHERE expiresAt < NOW() SET isArchived = true`.
 - Archive: `WHERE authorId = me AND isArchived = true`.
 
 ### Messaging: chat without follow
@@ -540,9 +544,10 @@ GET    /calls/turn-credentials
 | 2. Posts core (FE) | 3-5 | Feed page, post card, create post, profile grid, like/comment/follow UI (shuffle client-side) | ✅ Done |
 | 3. Posts nâng cao | 6 | Carousel (3.1) + video (3.2) + nested replies & @mention (3.3); sticker/gif → defer | ✅ Done |
 | 4.1 Stories Core | 7 | BE module (Story/StoryView + 5 endpoints) + StoryBar data thật + composer slim (9:16 / video ≤15s) + viewer cơ bản | 🟡 Code-complete (chờ migration apply + verify) |
-| 4.2 Stories viewer+ | 7 | Progress bars + gestures (hold/swipe) + auto-advance qua users | ⏳ |
-| 4.3 Stories overlays | 8 | StoryItem: mention/sticker/emoji/text (drag/scale/rotate) | ⏳ |
-| 4.4 Stories archive | 8 | isArchived cron + archive page + AudioTrack | ⏳ |
+| 4.2 Stories viewer+ | 7 | Progress bars + gestures (hold/swipe) + auto-advance qua users | ✅ Done |
+| 4.3a Stories overlays | 8 | StoryItem: TEXT + EMOJI (drag) + video edit | ✅ Done |
+| 4.3b Stories overlays | 8 | MENTION/STICKER/TAG + multi-touch scale/rotate | ⏳ |
+| 4.4 Stories archive | 8 | isArchived cron + archive page + profile ring entry + view count/viewers (AudioTrack defer) | ✅ Done |
 | 5. Messaging | 9-12 | 1-1, group, reactions, recall, share | ⏳ |
 | 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |

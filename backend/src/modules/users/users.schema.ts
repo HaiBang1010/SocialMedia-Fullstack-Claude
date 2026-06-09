@@ -26,6 +26,7 @@ export const userProfileSchema = z.object({
   followersCount: z.number(),
   followingCount: z.number(),
   isFollowing: z.boolean().nullable(),
+  hasActiveStory: z.boolean(), // Phase 4.4 — drives the story ring on the profile avatar
 });
 
 export type UserProfile = z.infer<typeof userProfileSchema>;

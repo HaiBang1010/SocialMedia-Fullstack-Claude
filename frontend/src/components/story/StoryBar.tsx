@@ -133,7 +133,7 @@ export default function StoryBar() {
                 key={item.user.id}
                 user={item.user}
                 hasUnseen={item.hasUnseenStory}
-                onClick={() => openViewer(item.user.username)}
+                onClick={() => openViewer({ mode: 'feed', startUsername: item.user.username })}
               />
             ))}
       </div>

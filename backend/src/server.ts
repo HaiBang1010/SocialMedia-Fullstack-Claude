@@ -14,6 +14,7 @@ import postsRoutes from "./modules/posts/posts.routes";
 import commentsRoutes from "./modules/comments/comments.routes";
 import feedRoutes from "./modules/feed/feed.routes";
 import storiesRoutes from "./modules/stories/stories.routes";
+import { startArchiveJob } from "./jobs/archiveExpiredStories";
 
 const app = express();
 
@@ -74,9 +75,13 @@ const server = app.listen(env.PORT, env.HOST, () => {
   }
 });
 
+// Phase 4.4 — hourly cron flipping isArchived on expired stories (runs immediately too).
+const archiveJob = startArchiveJob();
+
 // Graceful shutdown — đóng kết nối DB, server khi nhận signal kill
 const shutdown = (signal: string) => {
   console.log(`\n${signal} nhận được, đang đóng server...`);
+  clearInterval(archiveJob);
   server.close(() => {
     console.log("Server đã đóng.");
     process.exit(0);

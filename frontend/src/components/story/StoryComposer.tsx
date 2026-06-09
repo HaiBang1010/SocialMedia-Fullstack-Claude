@@ -102,7 +102,8 @@ export default function StoryComposer() {
 
   const handleViewStory = () => {
     closeAndReset();
-    if (me) openViewer(me.username);
+    // Self isn't in the feed → single-user mode reads /users/:username/stories.
+    if (me) openViewer({ mode: 'single-user', startUsername: me.username });
   };
 
   const renderStep = () => {

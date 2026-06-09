@@ -37,4 +37,10 @@ export const queryKeys = {
 
   // A user's active stories (GET /users/:username/stories).
   userStories: (username: string) => ['users', username, 'stories'] as const,
+
+  // The current user's archived stories (GET /stories/archive).
+  archivedStories: () => ['stories', 'archive'] as const,
+
+  // A story's viewers (GET /stories/:id/views).
+  storyViewers: (storyId: string) => ['stories', storyId, 'views'] as const,
 };

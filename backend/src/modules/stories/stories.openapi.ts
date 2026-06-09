@@ -6,7 +6,10 @@ import {
   storyItemResponseSchema,
   storyFeedResponseSchema,
   userStoriesResponseSchema,
+  archivedStoriesResponseSchema,
+  viewersListResponseSchema,
 } from './stories.schema';
+import { paginationSchema } from '../posts/posts.schema';
 import { errorResponseSchema, validationErrorResponseSchema } from '../../lib/openapi';
 
 const json = <T extends z.ZodTypeAny>(schema: T) => ({
@@ -24,8 +27,11 @@ export function registerStoriesOpenApi(registry: OpenAPIRegistry) {
   const Story = registry.register('Story', storyResponseSchema);
   const StoryFeed = registry.register('StoryFeed', storyFeedResponseSchema);
   const UserStories = registry.register('UserStories', userStoriesResponseSchema);
+  const ArchivedStories = registry.register('ArchivedStories', archivedStoriesResponseSchema);
+  const ViewersList = registry.register('StoryViewers', viewersListResponseSchema);
   const CreateStoryReq = registry.register('CreateStoryRequest', createStorySchema);
   const idParam = z.object({ id: z.string() });
+  const paginationQuery = paginationSchema;
 
   registry.registerPath({
     method: 'post',
@@ -53,6 +59,36 @@ export function registerStoriesOpenApi(registry: OpenAPIRegistry) {
     responses: {
       200: { description: 'Grouped story feed', ...json(StoryFeed) },
       401: unauthorized401,
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/stories/archive',
+    tags: ['Stories'],
+    summary: "The current user's own archived (expired) stories",
+    description: 'Archived stories of the authenticated user, newest-first, cursor-paginated.',
+    security: [{ bearerAuth: [] }],
+    request: { query: paginationQuery },
+    responses: {
+      200: { description: 'Archived stories', ...json(ArchivedStories) },
+      401: unauthorized401,
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/stories/{id}/views',
+    tags: ['Stories'],
+    summary: 'List who viewed a story (owner only)',
+    description: 'Viewers of a story, most-recent first, cursor-paginated. Owner only (403 otherwise).',
+    security: [{ bearerAuth: [] }],
+    request: { params: idParam, query: paginationQuery },
+    responses: {
+      200: { description: 'Story viewers', ...json(ViewersList) },
+      401: unauthorized401,
+      403: forbidden403,
+      404: notFound404,
     },
   });
 

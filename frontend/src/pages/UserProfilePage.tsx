@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ImagePlus } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useComposerStore } from '@/stores/composerStore';
+import { useStoryViewerStore } from '@/stores/storyViewerStore';
 import { useUserProfile } from '@/features/users/hooks/useUserProfile';
 import { queryKeys } from '@/lib/queryKeys';
 import { formatNumber } from '@/lib/format';
@@ -32,6 +33,8 @@ export default function UserProfilePage() {
   const updateUser = useAuthStore((s) => s.updateUser);
   const queryClient = useQueryClient();
   const openComposer = useComposerStore((s) => s.open);
+  const openViewer = useStoryViewerStore((s) => s.open);
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
 
   const isSelf = me?.username === username;
@@ -80,29 +83,54 @@ export default function UserProfilePage() {
     { label: 'following', value: formatNumber(user.followingCount) },
   ];
 
+  const avatarImg = (
+    <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-2xl font-medium text-muted-foreground sm:size-28">
+      {user.avatarUrl ? (
+        <img src={user.avatarUrl} alt={user.name} className="size-full object-cover" />
+      ) : (
+        initials(user.name)
+      )}
+    </span>
+  );
+
+  // Story ring (Phase 4.4): wrap the avatar in a coral gradient + make it a viewer
+  // entry point when the user has active stories. Opens in single-user mode (a profile
+  // tap shows just this user's stories — no cross-user advance).
+  const avatarNode = user.hasActiveStory ? (
+    <button
+      type="button"
+      aria-label={`View @${user.username}'s story`}
+      onClick={() => openViewer({ mode: 'single-user', startUsername: user.username })}
+      className="shrink-0 rounded-full bg-gradient-to-tr from-primary to-[oklch(0.7_0.17_80)] p-[3px] transition-transform hover:scale-[1.02]"
+    >
+      <span className="block rounded-full bg-background p-[3px]">{avatarImg}</span>
+    </button>
+  ) : (
+    avatarImg
+  );
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
       {/* Header */}
       <header className="flex items-center gap-6 sm:gap-10">
-        <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-2xl font-medium text-muted-foreground sm:size-28">
-          {user.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={user.name}
-              className="size-full object-cover"
-            />
-          ) : (
-            initials(user.name)
-          )}
-        </span>
+        {avatarNode}
 
         <div className="flex flex-1 flex-col gap-4">
           <div className="flex flex-wrap items-center gap-4">
             <span className="text-lg">@{user.username}</span>
             {isSelf ? (
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-                Edit profile
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                  Edit profile
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/me/stories/archive')}
+                >
+                  Archive
+                </Button>
+              </>
             ) : (
               user.isFollowing !== null && (
                 <FollowButton

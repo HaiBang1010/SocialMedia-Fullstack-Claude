@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { Eye, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Avatar from '@/components/common/Avatar';
 import Spinner from '@/components/common/Spinner';
 import StoryProgressBars from './StoryProgressBars';
 import StoryOverlayLayer from './StoryOverlayLayer';
+import StoryViewersModal from './StoryViewersModal';
 import { useStoryViewerStore } from '@/stores/storyViewerStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useStoriesFeed } from '@/features/stories/hooks/useStoriesFeed';
 import { useUserStories } from '@/features/stories/hooks/useUserStories';
+import { useArchivedStories } from '@/features/stories/hooks/useArchivedStories';
 import { useViewStory } from '@/features/stories/hooks/useViewStory';
 import { useDeleteStory } from '@/features/stories/hooks/useDeleteStory';
 import { useStoryGestures } from '@/hooks/useStoryGestures';
@@ -31,36 +33,59 @@ import { formatRelativeTime } from '@/lib/format';
 // tap-nav gestures.
 export default function StoryViewer() {
   const isOpen = useStoryViewerStore((s) => s.isOpen);
+  const mode = useStoryViewerStore((s) => s.mode);
   const startUsername = useStoryViewerStore((s) => s.startUsername);
+  const startStoryId = useStoryViewerStore((s) => s.startStoryId);
   const close = useStoryViewerStore((s) => s.close);
   const me = useAuthStore((s) => s.user);
 
+  // One data source per mode, each enabled only for its mode (feed is the shared
+  // StoryBar cache, always on). See storyViewerStore for the mode semantics.
   const { data: feedItems, isLoading: feedLoading } = useStoriesFeed();
+  const { data: singleStories, isLoading: singleLoading } = useUserStories(
+    startUsername,
+    isOpen && mode === 'single-user',
+  );
+  const {
+    data: archiveData,
+    isLoading: archiveLoading,
+    hasNextPage: archiveHasNextPage,
+    fetchNextPage: archiveFetchNextPage,
+  } = useArchivedStories(isOpen && mode === 'archive');
   const { view } = useViewStory();
   const { remove } = useDeleteStory();
 
-  // -1 = not yet initialized (FEED mode sets the real index). Single-user mode
-  // leaves it at -1 and reads stories from useUserStories instead.
+  // -1 = not a cross-user feed flow (single-user / archive leave it at -1).
   const [currentUserIndex, setCurrentUserIndex] = useState(-1);
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
   const [isUnseenFlow, setIsUnseenFlow] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [isViewersModalOpen, setIsViewersModalOpen] = useState(false);
   const initializedRef = useRef(false);
+  const modalOpenRef = useRef(false);
+  modalOpenRef.current = isViewersModalOpen;
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Archive queue = all loaded pages flattened (newest-first).
+  const archivedStories = useMemo(
+    () => archiveData?.pages.flatMap((p) => p.stories),
+    [archiveData],
+  );
   const feedUser = currentUserIndex >= 0 ? feedItems?.[currentUserIndex] : undefined;
 
-  // Single-user fallback: only when the start user isn't in the loaded feed.
-  const startInFeed = !!feedItems?.some((it) => it.user.username === startUsername);
-  const singleEnabled = isOpen && !!startUsername && feedItems !== undefined && !startInFeed;
-  const { data: singleStories, isLoading: singleLoading } = useUserStories(
-    startUsername,
-    singleEnabled,
-  );
-
-  const stories = feedUser ? feedUser.stories : singleEnabled ? singleStories : undefined;
+  const stories =
+    mode === 'feed'
+      ? feedUser?.stories
+      : mode === 'single-user'
+        ? singleStories
+        : archivedStories;
   const currentStory = stories?.[currentStoryIndex];
-  const isLoading = feedLoading || (singleEnabled && singleLoading);
+  const isLoading =
+    mode === 'feed' ? feedLoading : mode === 'single-user' ? singleLoading : archiveLoading;
+
+  // Cross-user advance is FEED-only; single-user / archive view one user's set and close.
+  const canCrossUserAdvance = mode === 'feed' && isUnseenFlow;
+  const shouldMarkSeen = mode !== 'archive'; // archived stories are already seen
 
   // Advance: next story → else (FEED + unseen flow) the next user with unseen
   // stories → else close. Forward-only + gated on isUnseenFlow matches IG: tapping
@@ -73,7 +98,7 @@ export default function StoryViewer() {
       setCurrentStoryIndex((i) => i + 1);
       return;
     }
-    if (isUnseenFlow && feedItems && currentUserIndex >= 0) {
+    if (canCrossUserAdvance && feedItems && currentUserIndex >= 0) {
       const next = feedItems.findIndex(
         (it, idx) => idx > currentUserIndex && it.hasUnseenStory,
       );
@@ -83,8 +108,25 @@ export default function StoryViewer() {
         return;
       }
     }
+    // Archive: at the end of the loaded set, pull the next page and step into it
+    // (brief spinner until it resolves); otherwise close.
+    if (mode === 'archive' && archiveHasNextPage) {
+      archiveFetchNextPage();
+      setCurrentStoryIndex((i) => i + 1);
+      return;
+    }
     close();
-  }, [stories, currentStoryIndex, isUnseenFlow, feedItems, currentUserIndex, close]);
+  }, [
+    stories,
+    currentStoryIndex,
+    canCrossUserAdvance,
+    feedItems,
+    currentUserIndex,
+    mode,
+    archiveHasNextPage,
+    archiveFetchNextPage,
+    close,
+  ]);
 
   const goPrev = useCallback(() => {
     setCurrentStoryIndex((i) => (i > 0 ? i - 1 : i));
@@ -98,21 +140,29 @@ export default function StoryViewer() {
     onDismiss: close,
   });
 
-  // Initialize once per open: pick the data source + jump to the first unseen
-  // story. Guarded by initializedRef so the optimistic view-mark mutating the
-  // caches doesn't reset our position mid-viewing. Resets when the viewer closes.
+  // Pause for either a hold gesture OR the viewers modal being open. Drives the
+  // progress bars + video playback so the timeline freezes while the list is up.
+  const isPaused = gestures.isPaused || isViewersModalOpen;
+
+  // Initialize once per open: pick the start index for the active mode. Guarded by
+  // initializedRef so the optimistic view-mark mutating the caches doesn't reset our
+  // position mid-viewing. Resets when the viewer closes.
   useEffect(() => {
     if (!isOpen) {
       initializedRef.current = false;
       setCurrentUserIndex((i) => (i === -1 ? i : -1));
+      setIsViewersModalOpen(false);
       return;
     }
     if (initializedRef.current) return;
-    if (feedItems === undefined) return; // wait for the feed query to resolve
 
-    const uIdx = feedItems.findIndex((it) => it.user.username === startUsername);
-    if (uIdx !== -1) {
-      // FEED mode — cross-user enabled.
+    if (mode === 'feed') {
+      if (feedItems === undefined) return; // wait for the feed query to resolve
+      const uIdx = feedItems.findIndex((it) => it.user.username === startUsername);
+      if (uIdx === -1) {
+        close(); // start user is no longer in the feed
+        return;
+      }
       const firstUnseen = feedItems[uIdx].stories.findIndex((s) => !s.isViewedByMe);
       setCurrentUserIndex(uIdx);
       setCurrentStoryIndex(firstUnseen === -1 ? 0 : firstUnseen);
@@ -120,18 +170,33 @@ export default function StoryViewer() {
       initializedRef.current = true;
       return;
     }
-    // SINGLE-USER mode — wait for the user's stories, then start (no cross-user).
-    if (singleStories === undefined) return;
-    if (singleStories.length === 0) {
+
+    if (mode === 'single-user') {
+      if (singleStories === undefined) return;
+      if (singleStories.length === 0) {
+        close();
+        return;
+      }
+      const firstUnseen = singleStories.findIndex((s) => !s.isViewedByMe);
+      setCurrentUserIndex(-1);
+      setCurrentStoryIndex(firstUnseen === -1 ? 0 : firstUnseen);
+      setIsUnseenFlow(false);
+      initializedRef.current = true;
+      return;
+    }
+
+    // ARCHIVE mode — start at the clicked story (startStoryId), no cross-user, no unseen.
+    if (archivedStories === undefined) return;
+    if (archivedStories.length === 0) {
       close();
       return;
     }
-    const firstUnseen = singleStories.findIndex((s) => !s.isViewedByMe);
+    const idx = startStoryId ? archivedStories.findIndex((s) => s.id === startStoryId) : 0;
     setCurrentUserIndex(-1);
-    setCurrentStoryIndex(firstUnseen === -1 ? 0 : firstUnseen);
+    setCurrentStoryIndex(idx === -1 ? 0 : idx);
     setIsUnseenFlow(false);
     initializedRef.current = true;
-  }, [isOpen, feedItems, singleStories, startUsername, close]);
+  }, [isOpen, mode, feedItems, singleStories, archivedStories, startUsername, startStoryId, close]);
 
   // Body scroll lock + ESC while open.
   useEffect(() => {
@@ -139,7 +204,8 @@ export default function StoryViewer() {
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      // When the viewers modal is open, ESC closes the modal (Radix) — not the viewer.
+      if (e.key === 'Escape' && !modalOpenRef.current) close();
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -148,11 +214,10 @@ export default function StoryViewer() {
     };
   }, [isOpen, close]);
 
-  // Mark the current story seen (idempotent). Skipped for already-seen stories so
-  // it doesn't re-fire after the optimistic cache flip. The author's username
-  // tells the cache which userStories list to patch (works in both modes).
+  // Mark the current story seen (idempotent). Skipped in archive mode (already seen,
+  // and the backend rejects views on archived stories) and for already-seen stories.
   useEffect(() => {
-    if (isOpen && currentStory && !currentStory.isViewedByMe) {
+    if (isOpen && shouldMarkSeen && currentStory && !currentStory.isViewedByMe) {
       view({ storyId: currentStory.id, username: currentStory.author.username });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -160,10 +225,13 @@ export default function StoryViewer() {
 
   // Video playback: pause on hold, otherwise play (with sound first — opening the
   // viewer was a user gesture — then fall back to muted autoplay if blocked).
+  // `isOpen` is in the deps so reopening the SAME story re-fires this: the viewer
+  // doesn't unmount (it renders null while closed) so currentStory.id is unchanged
+  // on reopen, but the <video> element DID remount and needs play() called again.
   useEffect(() => {
     const v = videoRef.current;
     if (!v || currentStory?.mediaType !== 'VIDEO') return;
-    if (gestures.isPaused) {
+    if (isPaused) {
       v.pause();
       return;
     }
@@ -172,7 +240,7 @@ export default function StoryViewer() {
       v.muted = true;
       v.play().catch(() => undefined);
     });
-  }, [currentStory?.id, currentStory?.mediaType, gestures.isPaused]);
+  }, [isOpen, currentStory?.id, currentStory?.mediaType, isPaused]);
 
   // React only sets the `muted` attribute on mount, not on updates — sync the DOM
   // property so the toggle (and a freshly mounted video) honor the preference.
@@ -182,7 +250,8 @@ export default function StoryViewer() {
 
   if (!isOpen) return null;
 
-  const isOwner = !!me && !!currentStory && me.id === currentStory.authorId;
+  // Archive is always the viewer's own stories → owner. Otherwise compare author id.
+  const isOwner = mode === 'archive' || (!!me && !!currentStory && me.id === currentStory.authorId);
 
   const handleDelete = () => {
     if (!currentStory || !stories) return;
@@ -230,7 +299,7 @@ export default function StoryViewer() {
               <StoryProgressBars
                 stories={stories}
                 currentIndex={currentStoryIndex}
-                isPaused={gestures.isPaused}
+                isPaused={isPaused}
                 onComplete={goNext}
               />
               <div className="absolute inset-x-3 top-8 flex items-center gap-2 text-white">
@@ -283,6 +352,21 @@ export default function StoryViewer() {
                   Empty / absent items render nothing (4.1/4.2 stories). */}
               <StoryOverlayLayer items={currentStory.items} />
 
+              {/* View count (owner only). Tap → viewers list. Left of the mute toggle. */}
+              {isOwner && currentStory.viewCount !== null && (
+                <button
+                  type="button"
+                  onClick={() => setIsViewersModalOpen(true)}
+                  className="absolute bottom-3 left-3 z-30 flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-sm text-white transition-colors hover:bg-black/60"
+                >
+                  <Eye className="size-4" />
+                  <span className="tabular-nums">{currentStory.viewCount}</span>
+                  <span className="text-white/80">
+                    {currentStory.viewCount === 1 ? 'view' : 'views'}
+                  </span>
+                </button>
+              )}
+
               {/* Mute toggle (video only). */}
               {currentStory.mediaType === 'VIDEO' && (
                 <button
@@ -307,6 +391,13 @@ export default function StoryViewer() {
           </>
         )}
       </div>
+
+      {/* Viewers list (owner only). Radix Dialog → portals above this overlay. */}
+      <StoryViewersModal
+        storyId={currentStory?.id ?? null}
+        open={isViewersModalOpen}
+        onClose={() => setIsViewersModalOpen(false)}
+      />
     </div>
   );
 }

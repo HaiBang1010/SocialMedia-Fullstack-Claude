@@ -185,4 +185,5 @@ model StoryView {
 
   @@id([storyId, viewerId]) // one view row per (story, viewer) — upsert keeps it idempotent
   @@index([viewerId]) // "have I seen these stories" batch lookup
+  @@index([storyId, viewedAt(sort: Desc)]) // viewers-list cursor pagination (Phase 4.4)
 }

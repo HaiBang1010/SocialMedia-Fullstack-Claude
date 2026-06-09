@@ -6,6 +6,48 @@
 
 ---
 
+## 2026-06-10 — Checkpoint 4.4 follow-up: browser-verify bugfixes (cron interval + video reopen)
+
+**Done (2 bug từ browser verify 4.4; `tsc` BE/FE + `vite build` 0 lỗi 2013 modules):**
+- **Cron interval 1h → 5 phút** (`archiveExpiredStories.ts`): archive page trống vì 3 story expired chưa flip `isArchived`. Root cause KHÔNG phải code bug — sweep đúng (edit jobs file → tsx reload → immediate-run archive cả 3: isArchived false→true; `listArchivedStories` trả test1=2/test2=1); nguyên nhân interval 1h + dev server không chạy liên tục ⇒ không tick fire trong window story expired. 5 phút + run-immediately làm archive responsive. Docs synced (backend/CLAUDE, ARCHITECTURE §6, PROGRESS entry 4.4).
+- **Video archive reopen frozen** (`StoryViewer.tsx`): reopen CÙNG video story → video đứng nhưng progress bar chạy → desync. Fix Option A: thêm `isOpen` vào deps effect video play/pause.
+
+**Lưu ý kỹ thuật:**
+- **Video play effect phải gate thêm `isOpen`**: viewer KHÔNG unmount khi close (chỉ `return null`) ⇒ `currentStoryIndex`/`currentStory.id` (component state) PERSIST qua close. Reopen cùng story ⇒ id không đổi ⇒ deps `[id, mediaType, isPaused]` không đổi ⇒ effect không re-fire ⇒ `<video key={id}>` (DOM remount mới, default paused, no `autoPlay`) không được gọi `play()`. Progress bar vẫn chạy vì CSS animation thuần trên mount mới (không qua effect) ⇒ desync. Image không dính (chỉ `<img>`, không cần play). Thêm `isOpen` (false→true) → deps đổi → re-fire → play. Close (true→false): effect chạy nhưng `v=null` (đã unmount) → early return safe.
+- **Cron không load-bearing (confirm lại)**: expired story đã bị ẩn bởi time-filter (`expiresAt>now`) trong active query; cron chỉ set cờ cho `/stories/archive`. Miss tick chỉ trễ archive page, không lộ story hết hạn.
+
+**Tech debt phát sinh (đề xuất BACKLOG, chờ confirm):**
+- `[P3] [frontend/story-viewer]` `muted` state KHÔNG reset khi reopen viewer (persist qua close vì component không unmount) — session trước fallback→muted thì reopen giữ muted. Pre-existing, không do fix video-reopen. Reset = `setMuted(false)` trong nhánh `!isOpen` của init effect nếu muốn mute về default mỗi lần mở.
+
+**Next:** Browser re-verify T1-T7 video reopen + T1-T22 4.4 còn lại (user). PASS → commit `feat: stories archive + cron + profile entry + view count (Checkpoint 4.4)` thẳng main (gộp cả 2 bugfix follow-up).
+
+---
+
+## 2026-06-09 — Checkpoint 4.4: Stories archive + cron + profile entry + view count/viewers (Phase 4 core hoàn thành)
+
+**Done (45/45 case PASS = backend smoke 23/23 [API 17 + cron 6] + browser 22/22; migration applied; `tsc` BE/FE + `vite build` 0 lỗi 2013 modules; OpenAPI 27 paths). 3 nhóm features:**
+- **Archive + Cron**: cron flip `isArchived` khi story hết 24h + `GET /stories/archive` (own archived, cursor) + `ArchivePage` `/me/stories/archive` (grid 9:16 thumbnail → mở archive viewer). Delete trong archive viewer cập nhật cả grid.
+- **Profile Entry**: `GET /users/:username` thêm `hasActiveStory` → avatar profile có ring coral khi có story active, tap mở viewer (single-user mode); self thêm nút "Archive".
+- **View Count + Viewers**: `viewCount` owner-only trong Story DTO + badge `👁 N views`; `GET /stories/:id/views` (owner-only) + `StoryViewersModal` (Radix dialog, infinite scroll); viewer pause khi modal mở.
+- **2 UX fix (browser verify)**: modal click viewer đóng cả viewer (không chỉ modal); `markStoryViewed` skip self-view (owner KHÔNG vào viewers list/viewCount) + cleanup 12 legacy self-view rows (DB → 0).
+
+**Lưu ý kỹ thuật — 5 pattern engineering mới Phase 4.4:**
+- **Cron `setInterval` thuần (0 dep)**: `src/jobs/archiveExpiredStories.ts` + `startArchiveJob()` (5 phút, run-immediately bù downtime, try/catch không crash) wired `server.ts` sau `app.listen`. KHÔNG load-bearing visibility (active query đã time-filter ẩn expired) — cron chỉ set cờ cho archive query đúng; miss tick chỉ trễ cờ.
+- **Owner-gate field privacy**: `serializeStory(...,{viewerId})` → `viewCount = isOwner ? _count.views : null`; gate ở BE (non-owner luôn null), feed loại self ⇒ feed luôn null, no leak — KHÔNG chỉ ẩn ở FE.
+- **StoryViewer 3-mode branch (extend hybrid dual-source 4.2)**: 1 component, `mode: feed | single-user | archive` quyết `canCrossUserAdvance`/`shouldMarkSeen`/`isOwner`/nguồn-data/init. Archive unreachable qua feed/userStories (cả 2 filter active) ⇒ bắt buộc nguồn thứ 3 `useArchivedStories`; archive mode = no mark-seen (BE reject archived) + no cross-user + isOwner=true.
+- **Archive infinite cache patch (storyCache extension)**: archive = `InfiniteData` (pages) ≠ feed/userStories plain object ⇒ `removeStoryFromCaches`/snapshot/restore thêm nhánh map-pages-filter; `useDeleteStory` +`cancelQueries(archivedStories())`.
+- **`userProfileSchema` vs `publicUserSelect` tách biệt**: `hasActiveStory` chỉ vào profile DTO (`findFirst` existence + privacy gate), KHÔNG vào 7-field `publicUserSelect` (reuse cho author/list-item) — tránh phình + query thừa.
+- (phụ) Route `/stories/archive` đặt **trước** `/:id` (Express order, tránh nuốt làm id); `markStoryViewed` skip-self GIỮ 404 (không đổi 410, nhất quán codebase); BE API `/stories/archive` (auth=me ngầm) ≠ FE page route `/me/stories/archive`; pause-on-modal combine `||` KHÔNG sửa `useStoryGestures` + ESC guard `modalOpenRef`.
+
+**Tech debt phát sinh (ĐÃ append BACKLOG trong session — không append lại):**
+- `[P3] [frontend/story-viewer]` Archive auto-advance qua page boundary = fetchNextPage + index++ (spinner ngắn) — không prefetch.
+- `[P3] [backend/stories]` viewCount `_count.views` aggregate per row kể cả feed (luôn null non-owner nhưng vẫn chạy aggregate) — tối ưu nếu feed phình.
+- `[P3] [stories]` View count không realtime (owner refetch mới thấy) — WebSocket Phase 5.
+
+**Next:** Commit `feat: stories archive + cron + profile entry + view count (Checkpoint 4.4)` thẳng main. Sau đó 4.3b (MENTION/STICKER/TAG + multi-touch) hoặc Phase 5 messaging.
+
+---
+
 ## 2026-06-09 — Checkpoint 4.3a: Story overlays builder (TEXT + EMOJI + video edit)
 
 **Done (BE migration + smoke 7/7 + browser verify 42/42 PASS [22 cases gốc + 20 cases extension] + `tsc` BE/FE + `vite build` 0 lỗi, 2009 modules):**

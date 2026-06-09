@@ -32,12 +32,14 @@
 - [P3] [frontend/feed] useFeed nhận custom limit khi cần (vd discover feed).
   Hiện tại no-arg, dùng backend default 20.
 
-  - [P3] [frontend/story-viewer] Profile-entry-point cho viewer (single-user mode):
-  Mở viewer từ profile page với own stories. Phải wire:
-  (a) useUserStories(me.username) thay useStoriesFeed
-  (b) Cross-user advance OFF (single user only)
-  (c) Delete button reachable + verify cross-user delete logic (currently 
-      unreachable trong feed flow)
+- [P3] [frontend/story-viewer] Archive viewer auto-advance qua page boundary
+      (Checkpoint 4.4): hết loaded set → `fetchNextPage()` + index++ (spinner ngắn
+      tới khi page kế load). Chấp nhận; nâng = prefetch-on-near-end nếu cần mượt.
+- [P3] [backend/stories] viewCount = `_count.views` aggregate mỗi story kể cả trong
+      feed (Checkpoint 4.4) — feed luôn trả `null` (non-owner, no leak) nhưng vẫn chạy
+      aggregate per row. Tối ưu (skip aggregate khi không phải owner) nếu feed phình.
+- [P3] [stories] View count KHÔNG realtime (Checkpoint 4.4) — owner refetch/reopen mới
+      thấy count tăng. Realtime qua WebSocket → Phase 5 (messaging mới có socket).
 
 - [ ] [backend/media] Image transform (thumbnail, resize) — Phase 2 chỉ lưu original; thumbnail server-side hoặc on-the-fly cân nhắc Phase polish.
 - [ ] [backend/feed] Feed cải tiến — Phase 2 dùng follow+random simple. Personalized ranking, recency weight, engagement signals → Phase polish.
@@ -60,6 +62,10 @@
 
 ## DONE
 
+- 2026-06-09 [frontend/story-viewer] Profile-entry-point cho viewer (single-user mode) —
+  Checkpoint 4.4. Avatar profile có ring coral khi `hasActiveStory` → mở viewer
+  single-user mode. Cross-user OFF. Delete reachable (archive + single-user). 4.2 đã
+  làm phần data-source fallback; 4.4 hoàn tất UI entry point.
 - 2026-06-06 [frontend/profile] Followers/following count placeholder `0` →
   count THẬT — Checkpoint 2.5. Backend `GET /users/:username` trả ProfileUser
   (postsCount/followersCount/followingCount + isFollowing). postsCount mirror grid.

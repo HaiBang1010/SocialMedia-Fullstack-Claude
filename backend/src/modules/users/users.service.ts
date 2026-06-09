@@ -63,6 +63,16 @@ export async function getUserProfile(username: string, viewerId?: string) {
         where: { authorId: user.id, visibility: { in: allowedVisibility } },
       });
 
+  // Phase 4.4 — whether to show a story ring on the avatar. Same privacy gate as the
+  // stories list (a private account hides its stories from non-follower non-owners).
+  // findFirst (existence) is cheaper than a full count.
+  const hasActiveStory = privateHidden
+    ? false
+    : !!(await prisma.story.findFirst({
+        where: { authorId: user.id, isArchived: false, expiresAt: { gt: new Date() } },
+        select: { id: true },
+      }));
+
   const { _count, ...publicFields } = user;
 
   return {
@@ -71,6 +81,7 @@ export async function getUserProfile(username: string, viewerId?: string) {
     followersCount: _count.followers,
     followingCount: _count.following,
     isFollowing: !viewerId || isOwner ? null : viewerFollows,
+    hasActiveStory,
   };
 }
 

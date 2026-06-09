@@ -98,6 +98,8 @@ export const storyResponseSchema = z.object({
   author: storyAuthorSchema,
   isViewedByMe: z.boolean(),
   items: z.array(storyItemResponseSchema), // Phase 4.3a overlays ([] for 4.1/4.2 stories)
+  // Phase 4.4 — owner-only view count; null for non-owners (no leak).
+  viewCount: z.number().nullable(),
 });
 
 // GET /stories/feed — active stories of followed users, grouped by author.
@@ -114,6 +116,23 @@ export const storyFeedResponseSchema = z.object({
 // GET /users/:username/stories — one user's active stories.
 export const userStoriesResponseSchema = z.object({
   stories: z.array(storyResponseSchema),
+});
+
+// GET /stories/archive — the viewer's own archived (expired) stories, cursor-paginated.
+export const archivedStoriesResponseSchema = z.object({
+  stories: z.array(storyResponseSchema),
+  nextCursor: z.string().nullable(),
+});
+
+// GET /stories/:id/views — one viewer entry (who saw the story, and when).
+export const viewerEntrySchema = z.object({
+  user: storyAuthorSchema,
+  viewedAt: z.string(), // ISO
+});
+
+export const viewersListResponseSchema = z.object({
+  viewers: z.array(viewerEntrySchema),
+  nextCursor: z.string().nullable(),
 });
 
 export type CreateStoryInput = z.infer<typeof createStorySchema>;

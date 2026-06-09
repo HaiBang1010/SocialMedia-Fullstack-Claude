@@ -6,8 +6,12 @@
 // keep them in sync here so the patch logic lives once instead of per hook.
 // Mirrors lib/postCache.ts.
 
-import type { QueryClient, QueryKey } from '@tanstack/react-query';
-import type { StoryFeedResponse, UserStoriesResponse } from '@/types/api';
+import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
+import type {
+  ArchivedStoriesResponse,
+  StoryFeedResponse,
+  UserStoriesResponse,
+} from '@/types/api';
 import { queryKeys } from '@/lib/queryKeys';
 
 // Mark one story viewed in the feed group + the user's stories list, recomputing
@@ -71,13 +75,30 @@ export function removeStoryFromCaches(
     if (stories.length === data.stories.length) return data;
     return { ...data, stories };
   });
+
+  // Archive grid (infinite cache, different shape from the plain caches above). Deleting
+  // from the archive viewer must drop the story here so its grid cell disappears.
+  qc.setQueryData<InfiniteData<ArchivedStoriesResponse>>(
+    queryKeys.archivedStories(),
+    (data) => {
+      if (!data) return data;
+      let touched = false;
+      const pages = data.pages.map((page) => {
+        if (!page.stories.some((s) => s.id === storyId)) return page;
+        touched = true;
+        return { ...page, stories: page.stories.filter((s) => s.id !== storyId) };
+      });
+      return touched ? { ...data, pages } : data;
+    },
+  );
 }
 
-// Snapshot both caches in onMutate so onError can roll an optimistic update back.
+// Snapshot the caches in onMutate so onError can roll an optimistic update back.
 export interface StoryCacheSnapshot {
   feed: StoryFeedResponse | undefined;
   userStories: UserStoriesResponse | undefined;
   userStoriesKey: QueryKey;
+  archive: InfiniteData<ArchivedStoriesResponse> | undefined;
 }
 
 export function snapshotStoryCaches(
@@ -88,10 +109,12 @@ export function snapshotStoryCaches(
     feed: qc.getQueryData<StoryFeedResponse>(queryKeys.storiesFeed()),
     userStories: qc.getQueryData<UserStoriesResponse>(queryKeys.userStories(username)),
     userStoriesKey: queryKeys.userStories(username),
+    archive: qc.getQueryData<InfiniteData<ArchivedStoriesResponse>>(queryKeys.archivedStories()),
   };
 }
 
 export function restoreStoryCaches(qc: QueryClient, snap: StoryCacheSnapshot): void {
   qc.setQueryData(queryKeys.storiesFeed(), snap.feed);
   qc.setQueryData(snap.userStoriesKey, snap.userStories);
+  qc.setQueryData(queryKeys.archivedStories(), snap.archive);
 }

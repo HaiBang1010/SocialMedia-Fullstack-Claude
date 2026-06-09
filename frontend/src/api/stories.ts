@@ -1,9 +1,11 @@
 import { apiClient } from './client';
 import type {
+  ArchivedStoriesResponse,
   CreateStoryInput,
   Story,
   StoryFeedResponse,
   UserStoriesResponse,
+  ViewersListResponse,
 } from '@/types/api';
 
 export const storiesApi = {
@@ -18,6 +20,22 @@ export const storiesApi = {
     const { data } = await apiClient.get<UserStoriesResponse>(
       `/users/${username}/stories`
     );
+    return data;
+  },
+
+  // GET /stories/archive → the current user's own archived stories (cursor-paginated).
+  listArchive: async (cursor?: string): Promise<ArchivedStoriesResponse> => {
+    const { data } = await apiClient.get<ArchivedStoriesResponse>('/stories/archive', {
+      params: cursor ? { cursor } : undefined,
+    });
+    return data;
+  },
+
+  // GET /stories/:id/views → who viewed a story (owner only, cursor-paginated).
+  listViewers: async (id: string, cursor?: string): Promise<ViewersListResponse> => {
+    const { data } = await apiClient.get<ViewersListResponse>(`/stories/${id}/views`, {
+      params: cursor ? { cursor } : undefined,
+    });
     return data;
   },
 

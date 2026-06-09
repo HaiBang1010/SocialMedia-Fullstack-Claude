@@ -3,6 +3,7 @@ import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { createStorySchema } from './stories.schema';
+import { paginationSchema } from '../posts/posts.schema';
 import * as storiesService from './stories.service';
 
 const router = Router();
@@ -28,6 +29,37 @@ router.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const result = await storiesService.getStoriesFeed(req.user!.id);
+    res.json(result);
+  }),
+);
+
+/**
+ * GET /stories/archive — the current user's own archived (expired) stories. Auth required.
+ * Declared before the /:id routes so "archive" is never captured as an id.
+ */
+router.get(
+  '/archive',
+  requireAuth,
+  validate(paginationSchema, 'query'),
+  asyncHandler(async (req, res) => {
+    const result = await storiesService.listArchivedStories(req.user!.id, req.query as any);
+    res.json(result);
+  }),
+);
+
+/**
+ * GET /stories/:id/views — list who viewed a story (owner only). Auth required.
+ */
+router.get(
+  '/:id/views',
+  requireAuth,
+  validate(paginationSchema, 'query'),
+  asyncHandler(async (req, res) => {
+    const result = await storiesService.listStoryViewers(
+      req.params.id,
+      req.user!.id,
+      req.query as any,
+    );
     res.json(result);
   }),
 );

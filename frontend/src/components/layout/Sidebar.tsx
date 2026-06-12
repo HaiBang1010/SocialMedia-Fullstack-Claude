@@ -30,7 +30,7 @@ const NAV: NavEntry[] = [
   { label: "Search", icon: Search },
   { label: "Explore", icon: Compass },
   { label: "Reels", icon: Film },
-  { label: "Messages", icon: Send },
+  { label: "Messages", icon: Send, to: "/messages" },
   { label: "Notifications", icon: Heart },
   { label: "Create", icon: SquarePlus, action: "create" },
   { label: "Profile", icon: User, to: "/profile" },

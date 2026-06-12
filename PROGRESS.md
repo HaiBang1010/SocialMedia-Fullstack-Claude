@@ -6,6 +6,39 @@
 
 ---
 
+## 2026-06-11 — Checkpoint 5.1: Messaging Foundation (Conversation/Message models + REST + responsive UI + optimistic send)
+
+**Done (BE migration applied + `prisma generate` + `tsc` BE 0 lỗi + smoke API 31/31 PASS + OpenAPI 32 path keys; FE `tsc -b` + `vite build` 0 lỗi 2030 modules; browser verify FE 8/8 + bonus PASS; 3 UX fix mid-test). Phase 5 mở màn — KHÔNG Socket.io (defer 5.2), KHÔNG image/video message (defer 5.4).**
+
+- **Backend (10 file + 1 migration)**: 3 model `Conversation`/`Participant`/`Message` + 2 enum (`ConversationType`, `MessageContentType` đủ 8 value gate TEXT). Module `conversations/` (schema/service/routes/openapi) + `messages/` (schema/service/openapi, KHÔNG routes — endpoint dưới `/conversations/:id/messages`). 6 endpoint: direct/group create, list, get, list+send messages. Mount `/conversations` + wire OpenAPI (Messages trước Conversations để Conversation `$ref` Message).
+- **Frontend (~17 file)**: data layer (types + `api/conversations` + queryKeys + `messageCache` + `messageBurst`), 5 hook (`useConversations`/`useConversation`/`useMessages` polling 5s/`useSendMessage` optimistic/`useStartDirectConversation`), 7 component + `MessagesPage` responsive + `conversationDisplay` helper. Wiring: 2 route, Sidebar/BottomNav "Messages", profile nút Message.
+
+**4 decision chốt + 2 refinement (đã verify):**
+- **D1 directKey race-safe**: `Conversation.directKey String? @unique` = `[a,b].sort().join(':')` → `findOrCreateDirectConversation` = `upsert` (idempotent, KHÔNG `$transaction` — khớp idiom Follow/Like/StoryView). GROUP `directKey=null`. Smoke: 2-direction → cùng id PASS.
+- **D2 full nullable schema**: migrate đủ field Conversation+Participant+Message; defer model `MessageMedia/MessageReaction/Call`. `MessageContentType` đủ 8 value DB + Zod gate TEXT (pattern StoryItemType 4.3a). `replyToId`/`sharedPostId` scalar-only (như `Notification.postId`; FK relation → 5.5).
+- **D3 breakpoint md (768)**: reuse `useIsDesktop` (KHÔNG breakpoint riêng).
+- **D4 newest-first store / reverse render**: cache newest-first (cursor BE), `MessageThread` `[...].reverse()` → oldest top/newest bottom; optimistic temp prepend page[0] = đáy sau reverse.
+- **R1 lastMessageAt** (xác nhận: KHÔNG query Prisma nào order parent theo child latest): denormalize `Conversation.lastMessageAt @default(now())`, bump trong `sendTextMessage`, order `[{lastMessageAt desc},{id desc}]`. Smoke: convo bubble lên top sau send PASS.
+- **R2 404-read/403-write** (`prefer-404-over-403-private`): non-participant GET convo/messages → **404** (ẩn existence); POST message → **403** (write). Smoke cả 2 PASS.
+
+**Lưu ý kỹ thuật — pattern mới Phase 5.1:**
+- **Tránh circular import 2 service**: mỗi service tự `isParticipant` check (KHÔNG dùng chung helper) ⇒ import 1 chiều `conversations.service → messages.service` (chỉ `serializeMessage`), KHÔNG cycle.
+- **Scroll preserve on prepend**: `useLayoutEffect` + `loadingOlder` ref (capture `scrollHeight` trước fetchNextPage) → restore `scrollTop = scrollHeight - prev` khi older load (newestId KHÔNG đổi); else scroll-bottom khi newestId đổi (new msg/initial).
+- **Polling tab-inactive auto-pause**: TanStack v5 `refetchInterval:5000` + default `refetchIntervalInBackground:false` ⇒ KHÔNG poll khi tab ẩn, refetch on focus. KHÔNG code tay.
+- **Module split message-under-conversation**: 2 endpoint message ở `conversations.routes` delegate `messages.service` (pattern `posts/:id/comments`); standalone `/messages/:id` (DELETE/reactions) defer 5.5 ⇒ KHÔNG `messages.routes.ts` 5.1.
+- **Optimistic = useCreateComment** (KHÔNG useCreatePost): temp-id reconcilable swap-in-place; `swapTempMessage` fallback invalidate.
+
+**UX fixes (browser verify mid-test — 3 fix, mỗi fix `vite build` 0 lỗi):**
+- **MessageBubble text wrap** (`MessageBubble.tsx`): bug "Hello" wrap giữa từ → "He/llo" + long token overflow ngang. Root cause = `max-w-[75%]` là fraction của wrapper `flex justify-*` **shrink-to-fit** ⇒ `width ≤ 0.75×(own width)` circular collapse về min-content ⇒ `break-words` character-break. Fix: `max-w-[75%]` → **`max-w-full`** (cap thật = parent column `max-w-[80%]`, anchored vào row width definite — hết collapse) + `break-words` → **`[overflow-wrap:anywhere]`** (long no-space "zzz…"/URL break trong cột). `whitespace-pre-wrap` giữ (newline Shift+Enter). Lưu ý: đề xuất ban đầu giữ `max-w-[75%]` sẽ làm bug NẶNG hơn (anywhere → collapse ~1 char/dòng).
+- **(Pattern 31) Global scrollbar styling** (`index.css`, cross-theme + thin): `::-webkit-scrollbar` 8px + track `transparent` + thumb `oklch(0.55 0 0 / 0.4)` (gray + alpha, **KHÔNG `var(--muted)` token** → cùng 1 màu đúng cả light + dark) hover `/0.6`; Firefox `html { scrollbar-width: thin; scrollbar-color }`. `.scrollbar-hide` (StoryBar/Carousel) GIỮ ẩn — class specificity > global `::-webkit-scrollbar`. Minifier convert thumb oklch→`#71717166` (gray gamut lossless, visual giống hệt).
+- **MessageInput textarea scrollbar**: thử `pr-4` (gap cho scrollbar) → đổi **`scrollbar-hide`** (reuse util Phase 4) + revert về `px-3` symmetric. `scrollbar-hide` chỉ ẩn VISUAL (`overflow` giữ) ⇒ scroll wheel/arrow/touch/auto-scroll-typing vẫn work. Message thread KHÔNG opt-in ⇒ vẫn hiện thin-gray global (textarea-only hide).
+
+**DB note**: smoke test tạo 3 user `msga_/msgb_/msgc_<base36 ts>` + 1 group "Trip" + vài message — leftover trong DB dev (vô hại, có thể `prisma studio` xóa nếu muốn sạch).
+
+**Next:** Browser verify DONE (31 BE smoke + 8 FE case + bonus PASS; 3 UX fix mid-test). Commit `feat: messaging foundation — conversations + messages + responsive UI (Checkpoint 5.1)` thẳng main. Sau đó Phase 5.2 Socket.io realtime.
+
+---
+
 ## 2026-06-10 — Checkpoint 4.4 follow-up: browser-verify bugfixes (cron interval + video reopen)
 
 **Done (2 bug từ browser verify 4.4; `tsc` BE/FE + `vite build` 0 lỗi 2013 modules):**

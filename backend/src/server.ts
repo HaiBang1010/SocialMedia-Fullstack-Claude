@@ -14,6 +14,7 @@ import postsRoutes from "./modules/posts/posts.routes";
 import commentsRoutes from "./modules/comments/comments.routes";
 import feedRoutes from "./modules/feed/feed.routes";
 import storiesRoutes from "./modules/stories/stories.routes";
+import conversationsRoutes from "./modules/conversations/conversations.routes";
 import { startArchiveJob } from "./jobs/archiveExpiredStories";
 
 const app = express();
@@ -61,6 +62,7 @@ app.use("/posts", postsRoutes);
 app.use("/comments", commentsRoutes);
 app.use("/feed", feedRoutes);
 app.use("/stories", storiesRoutes);
+app.use("/conversations", conversationsRoutes);
 
 // ── ERROR HANDLERS ────────────────────────────
 app.use(notFoundHandler);

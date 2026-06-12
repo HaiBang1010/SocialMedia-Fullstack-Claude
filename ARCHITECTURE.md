@@ -376,6 +376,12 @@ enum NotificationType { LIKE COMMENT FOLLOW MENTION MESSAGE STORY_VIEW }
 > - `expiresAt = now()+24h` (set backend lúc create). Active = `expiresAt > now AND isArchived = false`. Cron flip `isArchived` → Phase 4.4.
 >
 > **Phase 4.4 addendum:** `StoryView` thêm `@@index([storyId, viewedAt(sort: Desc)])` (backing viewers-list cursor). Cron `archiveExpiredStories` (setInterval 1h, `server.ts`) flip `isArchived`. `Story` response thêm `viewCount` (owner-only, null cho non-owner — feed loại self nên luôn null). `getUserProfile` thêm `hasActiveStory` (drive story ring trên profile avatar). KHÔNG model mới, chỉ 1 index additive.
+>
+> **Phase 5.1 — `Conversation`/`Participant`/`Message` ACTUAL (khác bản plan ở trên):**
+> - `Conversation` thêm **`directKey String? @unique`** (sorted `"userA:userB"` cho DIRECT, null cho GROUP) → `findOrCreateDirectConversation` upsert-on-unique race-safe (KHÔNG `$transaction`) + **`lastMessageAt DateTime @default(now())`** denormalized (bump mỗi send) cho list ordering `[{lastMessageAt desc},{id desc}]` — vì KHÔNG query Prisma nào order parent theo child-latest. `@@index([lastMessageAt])`. `calls Call[]` relation **chưa khai** (Call model defer Phase 6).
+> - `Message`: `replyToId`/`sharedPostId` = **scalar column trơ** (KHÔNG FK relation `replyTo`/`replies`/`sharedPost` như plan — wired 5.5 reply/post-share, theo precedent `Notification.postId/commentId`). `MessageContentType` khai **đủ 8 value** nhưng Zod gate **TEXT** (5.1). `deletedAt?` soft-delete (recall 5.5). `media MessageMedia[]` + `reactions MessageReaction[]` **chưa khai** (model defer 5.4).
+> - `Participant`: `@@id([conversationId, userId])` + `@@index([userId])`; `lastReadMessageId?` lưu sẵn (read-receipt UI → 5.3). `User` thêm `sentMessages[]` + `conversations Participant[]`.
+> - **Defer models (5.4/5.5/6)**: `MessageMedia`, `MessageReaction`, `Call` (+ enum `CallType`) CHƯA migrate. Migration `create_conversations_and_messages`.
 
 ---
 
@@ -424,14 +430,16 @@ DELETE /stories/:id                   # owner only → 204
 GET    /stories/archive               # 4.4 — own archived (NOT /users/me/... — tránh username="me")
 GET    /stories/:id/views             # 4.4 — viewers list (owner only, 403 else)
 
-# Conversations & Messages (Phase 5)
-GET    /conversations
-POST   /conversations
-GET    /conversations/:id/messages
-POST   /conversations/:id/messages
-DELETE /messages/:id                  # thu hồi (soft delete)
-POST   /messages/:id/reactions
-DELETE /messages/:id/reactions
+# Conversations & Messages (Phase 5.1 — ACTUAL; khác plan: direct/group tách, get-by-id thêm)
+POST   /conversations/direct          # 5.1 — start/reuse 1-1 (idempotent directKey upsert)
+POST   /conversations/group           # 5.1 — create group (creator = admin)
+GET    /conversations                 # 5.1 — list, lastMessageAt desc, cursor
+GET    /conversations/:id             # 5.1 — one (participant only → 404 else)
+GET    /conversations/:id/messages    # 5.1 — newest-first, cursor (participant → 404 else)
+POST   /conversations/:id/messages    # 5.1 — send TEXT (participant → 403 else)
+DELETE /messages/:id                  # defer 5.5 — thu hồi (soft delete deletedAt)
+POST   /messages/:id/reactions        # defer 5.4
+DELETE /messages/:id/reactions        # defer 5.4
 
 # Media upload (Phase 2)
 POST   /media/presign
@@ -548,7 +556,8 @@ GET    /calls/turn-credentials
 | 4.3a Stories overlays | 8 | StoryItem: TEXT + EMOJI (drag) + video edit | ✅ Done |
 | 4.3b Stories overlays | 8 | MENTION/STICKER/TAG + multi-touch scale/rotate | ⏸ Defer (BACKLOG) |
 | 4.4 Stories archive | 8 | isArchived cron 5 phút + archive page + profile ring entry + view count/viewers (AudioTrack defer) | ✅ Done → **Phase 4 complete** |
-| 5. Messaging | 9-12 | 1-1, group, reactions, recall, share | ⏳ |
+| 5.1 Messaging Foundation | 9 | Conversation/Message models + REST (direct/group/list/get/messages) + responsive list+detail UI + optimistic send + polling 5s + burst grouping (KHÔNG Socket.io / media) | ✅ Done |
+| 5.2-5.5 Messaging | 10-12 | Socket.io realtime, typing, read receipts, reactions, media, recall, share, group UI | ⏳ |
 | 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |
 

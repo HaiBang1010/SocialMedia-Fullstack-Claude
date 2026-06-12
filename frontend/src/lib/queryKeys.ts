@@ -43,4 +43,13 @@ export const queryKeys = {
 
   // A story's viewers (GET /stories/:id/views).
   storyViewers: (storyId: string) => ['stories', storyId, 'views'] as const,
+
+  // The viewer's conversations (GET /conversations).
+  conversations: () => ['conversations'] as const,
+
+  // A single conversation (GET /conversations/:id).
+  conversation: (id: string) => ['conversations', id] as const,
+
+  // A conversation's messages (GET /conversations/:id/messages).
+  messages: (conversationId: string) => ['conversations', conversationId, 'messages'] as const,
 };

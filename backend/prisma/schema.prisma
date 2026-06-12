@@ -27,6 +27,8 @@ model User {
   likes        Like[]
   stories      Story[]
   storyViews   StoryView[]
+  sentMessages Message[]
+  conversations Participant[]
   // Follow relation naming is intentionally "inverted" (matches ARCHITECTURE §3):
   // - followers: rows where I am the `following` target  -> people who follow ME
   // - following: rows where I am the `follower`          -> people I follow
@@ -186,4 +188,80 @@ model StoryView {
   @@id([storyId, viewerId]) // one view row per (story, viewer) — upsert keeps it idempotent
   @@index([viewerId]) // "have I seen these stories" batch lookup
   @@index([storyId, viewedAt(sort: Desc)]) // viewers-list cursor pagination (Phase 4.4)
+}
+
+// Phase 5.1 — Messaging. A conversation is either a 1-1 DIRECT chat or a named GROUP.
+// directKey makes the find-or-create of a DIRECT conversation race-safe via a UNIQUE
+// constraint (sorted "userA:userB"); GROUP rows leave it null. lastMessageAt is a
+// denormalized copy of the newest message's createdAt, bumped on every send, so the
+// conversation list can order by recent activity with a plain cursor query (no parent-by-
+// child-aggregate ordering, which Prisma can't express cleanly).
+model Conversation {
+  id            String           @id @default(cuid())
+  type          ConversationType
+  directKey     String?          @unique // sorted "userA:userB" for DIRECT; null for GROUP
+  name          String? // GROUP only
+  avatarUrl     String? // GROUP only
+  lastMessageAt DateTime         @default(now()) // newest-message timestamp, for list ordering
+  createdAt     DateTime         @default(now())
+
+  participants Participant[]
+  messages     Message[]
+
+  @@index([lastMessageAt]) // conversation-list ordering
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+// Phase 5.1 — membership join table. Composite PK keeps one row per (conversation, user)
+// and makes membership lookups O(1). lastReadMessageId backs unread tracking (read-receipt
+// UI arrives in Phase 5.3). isAdmin is set for the group creator.
+model Participant {
+  conversationId    String
+  userId            String
+  joinedAt          DateTime @default(now())
+  lastReadMessageId String? // last message this user has read (read receipts → Phase 5.3)
+  isAdmin           Boolean  @default(false)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@id([conversationId, userId])
+  @@index([userId]) // "conversations I'm in" lookup
+}
+
+// Phase 5.1 — a single message. contentType is declared with the full set for forward
+// compatibility (mirrors StoryItemType's all-5 declaration in 4.3a), but Zod gates it to
+// TEXT in 5.1. replyToId / sharedPostId are scalar-only reference columns (no FK relation
+// yet — like Notification.postId/commentId), wired up when reply-to-message and post-share
+// land in Phase 5.5. deletedAt is the soft-delete (recall) marker, also Phase 5.5.
+model Message {
+  id             String             @id @default(cuid())
+  conversationId String
+  senderId       String
+  contentType    MessageContentType
+  content        String?            @db.Text
+  replyToId      String? // reply-to-message reference (relation wired in Phase 5.5)
+  sharedPostId   String? // shared-post reference (relation wired in Phase 5.5)
+  deletedAt      DateTime? // soft-delete / recall marker (Phase 5.5)
+  createdAt      DateTime           @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt]) // message-list cursor (newest-first)
+}
+
+enum MessageContentType {
+  TEXT // Phase 5.1
+  EMOJI // Phase 5.4
+  POST_SHARE // Phase 5.5
+  VOICE // Phase 5.4
+  IMAGE // Phase 5.4
+  VIDEO // Phase 5.4
+  STICKER // Phase 5.4
+  GIF // Phase 5.4
 }

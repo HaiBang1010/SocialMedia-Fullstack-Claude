@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useComposerStore } from '@/stores/composerStore';
 import { useStoryViewerStore } from '@/stores/storyViewerStore';
 import { useUserProfile } from '@/features/users/hooks/useUserProfile';
+import { useStartDirectConversation } from '@/features/messaging/hooks/useStartDirectConversation';
 import { queryKeys } from '@/lib/queryKeys';
 import { formatNumber } from '@/lib/format';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ export default function UserProfilePage() {
   const openComposer = useComposerStore((s) => s.open);
   const openViewer = useStoryViewerStore((s) => s.open);
   const navigate = useNavigate();
+  const startConversation = useStartDirectConversation();
   const [editing, setEditing] = useState(false);
 
   const isSelf = me?.username === username;
@@ -132,12 +134,24 @@ export default function UserProfilePage() {
                 </Button>
               </>
             ) : (
-              user.isFollowing !== null && (
-                <FollowButton
-                  username={user.username}
-                  isFollowing={user.isFollowing}
-                />
-              )
+              <>
+                {user.isFollowing !== null && (
+                  <FollowButton
+                    username={user.username}
+                    isFollowing={user.isFollowing}
+                  />
+                )}
+                {/* Open chat — no follow required (Phase 5.1). Disabled while the
+                    create request is in flight (the directKey upsert also dedupes). */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => startConversation.mutate({ targetUserId: user.id })}
+                  disabled={startConversation.isPending}
+                >
+                  Message
+                </Button>
+              </>
             )}
           </div>
 

@@ -173,3 +173,27 @@
 .animate-story-progress {
     animation: story-progress linear forwards;
 }
+
+/* Custom scrollbar — thin, theme-aware, transparent track. Gray + alpha (not a brand/var
+   token) so it reads correctly in BOTH light and dark without a per-theme override.
+   Elements opting into `.scrollbar-hide` keep their scrollbar hidden (higher specificity). */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: oklch(0.55 0 0 / 0.4);
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.55 0 0 / 0.6);
+}
+/* Firefox */
+html {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.55 0 0 / 0.4) transparent;
+}

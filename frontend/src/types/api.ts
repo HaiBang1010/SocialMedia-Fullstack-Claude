@@ -215,6 +215,64 @@ export interface ViewersListResponse {
   nextCursor: string | null;
 }
 
+// ── Messaging (Phase 5.1) ──────────────────────────────────────────────
+
+export type ConversationType = 'DIRECT' | 'GROUP';
+
+// Full enum mirrors the backend, but Phase 5.1 only ever sends/receives TEXT.
+export type MessageContentType =
+  | 'TEXT'
+  | 'EMOJI'
+  | 'POST_SHARE'
+  | 'VOICE'
+  | 'IMAGE'
+  | 'VIDEO'
+  | 'STICKER'
+  | 'GIF';
+
+// A conversation member, as returned inside a Conversation (user + admin flag).
+export interface Participant {
+  user: PublicUser;
+  isAdmin: boolean;
+}
+
+// One message. Returned BARE by POST /conversations/:id/messages and inside the
+// messages list. content is null only for deleted/recalled messages (Phase 5.5).
+export interface Message {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  contentType: MessageContentType;
+  content: string | null;
+  createdAt: string; // ISO
+  sender: PublicUser;
+}
+
+// A DIRECT (1-1) or GROUP conversation. name/avatarUrl are GROUP-only. lastMessage is
+// the newest non-deleted message (null for a brand-new group with no messages yet).
+export interface Conversation {
+  id: string;
+  type: ConversationType;
+  name: string | null;
+  avatarUrl: string | null;
+  createdAt: string; // ISO
+  lastMessageAt: string; // ISO — drives list ordering
+  participants: Participant[];
+  lastMessage: Message | null;
+}
+
+// GET /conversations — recent activity first, cursor-paginated.
+export interface ConversationListResponse {
+  conversations: Conversation[];
+  nextCursor: string | null;
+}
+
+// GET /conversations/:id/messages — newest-first, cursor-paginated.
+export interface MessagesListResponse {
+  messages: Message[];
+  nextCursor: string | null;
+}
+
 // ── Likes / Follows ────────────────────────────────────────────────────
 
 // POST/DELETE /posts/:id/like
@@ -306,6 +364,23 @@ export interface CreateCommentInput {
 // PATCH /comments/:id
 export interface UpdateCommentInput {
   content: string;
+}
+
+// POST /conversations/:id/messages — Phase 5.1 is TEXT-only.
+export interface SendMessageInput {
+  contentType: 'TEXT';
+  content: string;
+}
+
+// POST /conversations/direct
+export interface CreateDirectInput {
+  targetUserId: string;
+}
+
+// POST /conversations/group — participantIds excludes the creator (added server-side).
+export interface CreateGroupInput {
+  participantIds: string[];
+  name: string;
 }
 
 // Cursor pagination query params, shared by all list endpoints.

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Heart, Home, Search, SquarePlus, User, type LucideIcon } from 'lucide-react';
+import { Home, Search, Send, SquarePlus, User, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useComposerStore } from '@/stores/composerStore';
 
@@ -13,7 +13,7 @@ const ITEMS: BottomEntry[] = [
   { label: 'Home', icon: Home, to: '/' },
   { label: 'Search', icon: Search },
   { label: 'Create', icon: SquarePlus },
-  { label: 'Notifications', icon: Heart },
+  { label: 'Messages', icon: Send, to: '/messages' },
   { label: 'Profile', icon: User, to: '/profile' },
 ];
 

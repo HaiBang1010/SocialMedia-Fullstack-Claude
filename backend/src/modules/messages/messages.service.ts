@@ -1,0 +1,109 @@
+import { Prisma } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
+import { AppError } from '../../middleware/error';
+import { publicUserSelect } from '../users/users.service';
+import type { SendMessageInput } from './messages.schema';
+import type { PaginationInput } from '../posts/posts.schema';
+
+// include dùng chung cho mọi response trả 1 message.
+const messageInclude = {
+  sender: { select: publicUserSelect },
+} satisfies Prisma.MessageInclude;
+
+export type MessageRow = Prisma.MessageGetPayload<{ include: typeof messageInclude }>;
+
+/**
+ * Transform a Prisma message into the API DTO. sender keeps its Date — res.json()
+ * serializes to ISO at the HTTP layer (project convention). Exported so the conversations
+ * module can serialize the last-message preview from the same shape.
+ */
+export function serializeMessage(message: MessageRow) {
+  return {
+    id: message.id,
+    conversationId: message.conversationId,
+    senderId: message.senderId,
+    contentType: message.contentType,
+    content: message.content,
+    createdAt: message.createdAt.toISOString(),
+    sender: message.sender,
+  };
+}
+
+/** Membership lookup on the composite PK. True if userId is a participant. */
+async function isParticipant(conversationId: string, userId: string): Promise<boolean> {
+  const member = await prisma.participant.findUnique({
+    where: { conversationId_userId: { conversationId, userId } },
+    select: { userId: true },
+  });
+  return member !== null;
+}
+
+/**
+ * List a conversation's messages, newest-first (cursor on id). READ: a non-participant
+ * gets 404 (existence hidden — mirrors getViewablePost / prefer-404-over-403). Soft-deleted
+ * messages (Phase 5.5 recall) are excluded.
+ */
+export async function listMessages(
+  conversationId: string,
+  userId: string,
+  pagination: PaginationInput,
+) {
+  if (!(await isParticipant(conversationId, userId))) {
+    throw new AppError(404, 'ConversationNotFound', 'Conversation not found');
+  }
+
+  const { cursor, limit } = pagination;
+
+  const rows = await prisma.message.findMany({
+    where: { conversationId, deletedAt: null },
+    include: messageInclude,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+  });
+
+  const hasMore = rows.length > limit;
+  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? slice[slice.length - 1]!.id : null;
+
+  return { messages: slice.map(serializeMessage), nextCursor };
+}
+
+/**
+ * Send a TEXT message. WRITE: a non-participant gets 403 (the act of writing proves they
+ * know the conversation exists — mirrors updatePost non-owner → 403). Bumps the
+ * conversation's lastMessageAt (drives list ordering) and marks the sender as having read
+ * their own message. Three sequential writes — no transaction (the codebase's style).
+ */
+export async function sendTextMessage(
+  conversationId: string,
+  senderId: string,
+  input: SendMessageInput,
+) {
+  if (!(await isParticipant(conversationId, senderId))) {
+    throw new AppError(403, 'Forbidden', 'You are not a participant of this conversation');
+  }
+
+  const message = await prisma.message.create({
+    data: {
+      conversationId,
+      senderId,
+      contentType: 'TEXT',
+      content: input.content,
+    },
+    include: messageInclude,
+  });
+
+  // Denormalize newest-message time for conversation-list ordering, and auto-read the
+  // sender's own message (so it never counts toward their unread badge in Phase 5.3).
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { lastMessageAt: message.createdAt },
+  });
+  await prisma.participant.update({
+    where: { conversationId_userId: { conversationId, userId: senderId } },
+    data: { lastReadMessageId: message.id },
+  });
+
+  return serializeMessage(message);
+}

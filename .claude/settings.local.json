@@ -33,7 +33,17 @@
       "Bash(curl -s -o /dev/null -w \"stories/archive \\(no auth, expect 401\\)=%{http_code}\\\\n\" http://localhost:3000/stories/archive)",
       "Bash(curl -s -o /dev/null -w \"stories/x/views \\(no auth, expect 401\\)=%{http_code}\\\\n\" http://localhost:3000/stories/xyz/views)",
       "Bash(ls smoke_*.*)",
-      "Bash(git -C \"D:\\\\haibang\\\\Social Media\" status --short)"
+      "Bash(git -C \"D:\\\\haibang\\\\Social Media\" status --short)",
+      "Bash(powershell *)",
+      "Bash(wmic process *)",
+      "Bash(grep -v '^$')",
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; console.log\\(JSON.stringify\\(s,null,2\\)\\)\")",
+      "Bash(echo \"---EXIT:$?---\")",
+      "Bash(cmd //c \"taskkill /F /T /PID 15292\")",
+      "Bash(echo \"exit:$?\")",
+      "Bash(node \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\smoke_messaging.mjs\")",
+      "Bash(cmd //c \"taskkill /F /T /PID 24612\")",
+      "Bash(cmd //c \"taskkill /F /T /PID 13096\")"
     ]
   }
 }

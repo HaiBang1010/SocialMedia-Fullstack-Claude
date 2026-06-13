@@ -5,8 +5,16 @@ import BottomNav from './BottomNav';
 import PostComposerModal from '@/components/post/PostComposerModal';
 import StoryComposer from '@/components/story/StoryComposer';
 import StoryViewer from '@/components/story/StoryViewer';
+import { useSocketConnection } from '@/features/messaging/hooks/useSocketConnection';
+import { useGlobalSocketEvents } from '@/features/messaging/hooks/useGlobalSocketEvents';
 
 export default function AppLayout() {
+  // Phase 5.2 — open the realtime socket for authenticated users + bind app-wide listeners
+  // (presence, message:new). Lives here (the authed shell) so it connects on login and
+  // disconnects when this layout unmounts on logout.
+  useSocketConnection();
+  useGlobalSocketEvents();
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       <Sidebar />

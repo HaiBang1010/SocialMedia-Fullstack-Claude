@@ -174,6 +174,15 @@
     animation: story-progress linear forwards;
 }
 
+/* Typing indicator dots (Phase 5.2) — three dots, each delayed inline for a staggered bounce. */
+@keyframes typing-dot {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+}
+.typing-dot {
+    animation: typing-dot 1.4s infinite ease-in-out;
+}
+
 /* Custom scrollbar — thin, theme-aware, transparent track. Gray + alpha (not a brand/var
    token) so it reads correctly in BOTH light and dark without a per-theme override.
    Elements opting into `.scrollbar-hide` keep their scrollbar hidden (higher specificity). */

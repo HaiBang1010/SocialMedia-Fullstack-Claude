@@ -382,6 +382,8 @@ enum NotificationType { LIKE COMMENT FOLLOW MENTION MESSAGE STORY_VIEW }
 > - `Message`: `replyToId`/`sharedPostId` = **scalar column trơ** (KHÔNG FK relation `replyTo`/`replies`/`sharedPost` như plan — wired 5.5 reply/post-share, theo precedent `Notification.postId/commentId`). `MessageContentType` khai **đủ 8 value** nhưng Zod gate **TEXT** (5.1). `deletedAt?` soft-delete (recall 5.5). `media MessageMedia[]` + `reactions MessageReaction[]` **chưa khai** (model defer 5.4).
 > - `Participant`: `@@id([conversationId, userId])` + `@@index([userId])`; `lastReadMessageId?` lưu sẵn (read-receipt UI → 5.3). `User` thêm `sentMessages[]` + `conversations Participant[]`.
 > - **Defer models (5.4/5.5/6)**: `MessageMedia`, `MessageReaction`, `Call` (+ enum `CallType`) CHƯA migrate. Migration `create_conversations_and_messages`.
+>
+> **Phase 5.2 — Realtime (Socket.io):** chỉ thêm **`User.lastSeenAt DateTime?`** (nullable, set lúc socket disconnect — drive presence "last seen"). Migration `add_user_last_seen_at`. **KHÔNG model mới** — read receipts reuse `Participant.lastReadMessageId` (đã có 5.1, nay serialize ra DTO + cập nhật realtime qua `message:read`). Presence + typing là **in-memory** (process-lifetime, KHÔNG persist trừ lastSeenAt). Xem §5 cho event contract.
 
 ---
 
@@ -450,33 +452,41 @@ GET    /calls/turn-credentials
 
 ---
 
-## 5. Socket.io Events (Phase 5-6)
+## 5. Socket.io Events
+
+> **Phase 5.2 (DONE) — ACTUAL contract.** Send stays REST (D1: optimistic + persist in 5.1
+> unchanged); the socket is receive-only for messages — `sendTextMessage` broadcasts `message:new`
+> after the DB write. So `message:send` (C→S) from the original plan is **unused**. Rooms:
+> `user:<userId>` (joined on connect — message:new + presence) and `convo:<conversationId>`
+> (joined when the thread is open — typing + read receipts). Default namespace `/` + rooms (no
+> per-conversation namespace). Handshake auth: JWT in `auth.token` (validated once, reused fresh
+> from the store on reconnect).
 
 ```
+// ── Phase 5.2 (implemented) ──
 // Client → Server
-'message:send'           { conversationId, content, ... }
-'message:typing'         { conversationId }
-'message:read'           { conversationId, lastMessageId }
-
-'call:offer'             { to, sdp, type }
-'call:answer'            { to, sdp }
-'call:ice'               { to, candidate }
-'call:end'               { to }
+'conversation:join'      conversationId            // join convo room (participant-verified)
+'conversation:leave'     conversationId
+'typing:start'           conversationId            // server enriches with username
+'typing:stop'            conversationId
+'message:read'           { conversationId }         // mark-on-open; server resolves newest id
 
 // Server → Client
-'message:new'            { message }
-'message:deleted'        { messageId }
-'message:reaction'       { messageId, reaction }
-'message:typing'         { conversationId, userId }
-'message:read'           { conversationId, userId, messageId }
+'message:new'            { conversationId, message }            // → each participant's user room
+'typing:user'            { conversationId, userId, username, typing }   // → convo room, excl. typer
+'read-receipt:update'    { conversationId, userId, lastReadMessageId }  // → convo room, excl. reader
+'presence:snapshot'      { online: userId[] }       // → the connecting socket (its online partners)
+'presence:online'        { userId }                 // → partner user rooms (D2: contact-scoped)
+'presence:offline'       { userId, lastSeenAt }     // → partner user rooms (5s offline debounce)
 
-'call:incoming'          { from, sdp, type }
-'call:answered'          { from, sdp }
-'call:ice'               { from, candidate }
-'call:ended'             { from }
+// ── Deferred ──
+'message:deleted'        { messageId }              // recall — Phase 5.5
+'message:reaction'       { messageId, reaction }    // Phase 5.4
+'notification:new'       { notification }           // Phase 7
 
-'notification:new'       { notification }
-'presence:update'        { userId, online }
+// ── Calls — Phase 6 (signaling) ──
+'call:offer' / 'call:answer' / 'call:ice' / 'call:end'                  // Client → Server
+'call:incoming' / 'call:answered' / 'call:ice' / 'call:ended'           // Server → Client
 ```
 
 ---
@@ -557,7 +567,8 @@ GET    /calls/turn-credentials
 | 4.3b Stories overlays | 8 | MENTION/STICKER/TAG + multi-touch scale/rotate | ⏸ Defer (BACKLOG) |
 | 4.4 Stories archive | 8 | isArchived cron 5 phút + archive page + profile ring entry + view count/viewers (AudioTrack defer) | ✅ Done → **Phase 4 complete** |
 | 5.1 Messaging Foundation | 9 | Conversation/Message models + REST (direct/group/list/get/messages) + responsive list+detail UI + optimistic send + polling 5s + burst grouping (KHÔNG Socket.io / media) | ✅ Done |
-| 5.2-5.5 Messaging | 10-12 | Socket.io realtime, typing, read receipts, reactions, media, recall, share, group UI | ⏳ |
+| 5.2 Messaging Realtime | 10 | Socket.io infra (JWT handshake + user/convo rooms) + message:new broadcast (REST send unchanged) + typing + presence (online + last-seen, contact-scoped) + read receipts; polling removed | ✅ Done |
+| 5.3-5.5 Messaging | 11-12 | Reactions, media/voice, recall, post-share, group UI, GROUP read receipts | ⏳ |
 | 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |
 

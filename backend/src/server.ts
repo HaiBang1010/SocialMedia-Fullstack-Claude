@@ -16,6 +16,7 @@ import feedRoutes from "./modules/feed/feed.routes";
 import storiesRoutes from "./modules/stories/stories.routes";
 import conversationsRoutes from "./modules/conversations/conversations.routes";
 import { startArchiveJob } from "./jobs/archiveExpiredStories";
+import { initSocket } from "./socket";
 
 const app = express();
 
@@ -80,10 +81,16 @@ const server = app.listen(env.PORT, env.HOST, () => {
 // Phase 4.4 — hourly cron flipping isArchived on expired stories (runs immediately too).
 const archiveJob = startArchiveJob();
 
+// Phase 5.2 — attach Socket.io to the same HTTP server (realtime messaging: message:new,
+// typing, presence, read receipts). app.listen() returns an http.Server, so no separate
+// http.createServer() is needed.
+const io = initSocket(server, env.CORS_ORIGIN);
+
 // Graceful shutdown — đóng kết nối DB, server khi nhận signal kill
 const shutdown = (signal: string) => {
   console.log(`\n${signal} nhận được, đang đóng server...`);
   clearInterval(archiveJob);
+  io.close();
   server.close(() => {
     console.log("Server đã đóng.");
     process.exit(0);

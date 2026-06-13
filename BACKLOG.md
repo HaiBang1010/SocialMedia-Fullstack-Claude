@@ -80,7 +80,15 @@
       KHÔNG reset khi reopen (session trước fallback→muted thì reopen giữ muted).
 - [P3] [frontend/story-viewer] Bottom sheet UI cho ViewersListModal trên mobile — hiện
       Radix Dialog centered `max-w-md`; IG dùng bottom sheet kéo lên.
+[Phase polish]:
+- Auto-retry failed message on reconnect (Option C queue pattern)
+- Distinguish network vs validation errors for retry button visibility
+- Multi-message retry batch (currently per-message only)
+- Seen behavior toggle (IG default vs hide-on-reply) settings
 
+[Phase 5.3]:
+- Typing in conversation list view ("typing..." subtitle indicator)
+- Unread badge count
 ## DONE
 
 - 2026-06-10 [frontend/story-viewer] Bar↔video desync khi reopen video (progress bar chạy

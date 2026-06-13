@@ -32,7 +32,12 @@ function serializeConversation(convo: ConversationRow) {
     avatarUrl: convo.avatarUrl,
     createdAt: convo.createdAt.toISOString(),
     lastMessageAt: convo.lastMessageAt.toISOString(),
-    participants: convo.participants.map((p) => ({ user: p.user, isAdmin: p.isAdmin })),
+    participants: convo.participants.map((p) => ({
+      user: p.user,
+      isAdmin: p.isAdmin,
+      // Phase 5.2 — drives the "Seen" indicator (each member's last-read message).
+      lastReadMessageId: p.lastReadMessageId,
+    })),
     lastMessage: convo.messages[0] ? serializeMessage(convo.messages[0]) : null,
   };
 }

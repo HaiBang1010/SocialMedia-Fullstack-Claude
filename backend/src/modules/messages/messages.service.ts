@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
+import { emitNewMessage } from '../../socket/io';
 import type { SendMessageInput } from './messages.schema';
 import type { PaginationInput } from '../posts/posts.schema';
 
@@ -29,8 +30,9 @@ export function serializeMessage(message: MessageRow) {
   };
 }
 
-/** Membership lookup on the composite PK. True if userId is a participant. */
-async function isParticipant(conversationId: string, userId: string): Promise<boolean> {
+/** Membership lookup on the composite PK. True if userId is a participant. Exported so the
+ * socket layer (rooms / typing / read receipts) reuses the same check (Phase 5.2). */
+export async function isParticipant(conversationId: string, userId: string): Promise<boolean> {
   const member = await prisma.participant.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
     select: { userId: true },
@@ -105,5 +107,62 @@ export async function sendTextMessage(
     data: { lastReadMessageId: message.id },
   });
 
-  return serializeMessage(message);
+  // Phase 5.2 — broadcast the persisted message to every participant's user room (send stays
+  // REST; the socket only fans the result out). Reaches the sender's other tabs too — clients
+  // dedup by message.id. No-op if the socket server isn't up.
+  const serialized = serializeMessage(message);
+  const participants = await prisma.participant.findMany({
+    where: { conversationId },
+    select: { userId: true },
+  });
+  emitNewMessage(
+    conversationId,
+    serialized,
+    participants.map((p) => p.userId),
+  );
+
+  return serialized;
+}
+
+/**
+ * Mark a conversation as read up to its newest message for `userId` (Phase 5.2 read receipts,
+ * mark-on-open). Sets Participant.lastReadMessageId. Returns the read message id, or null when
+ * there are no messages OR it was already the last-read (so the caller skips the broadcast).
+ */
+export async function markConversationRead(conversationId: string, userId: string) {
+  const newest = await prisma.message.findFirst({
+    where: { conversationId, deletedAt: null },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { id: true },
+  });
+  if (!newest) return null;
+
+  const participant = await prisma.participant.findUnique({
+    where: { conversationId_userId: { conversationId, userId } },
+    select: { lastReadMessageId: true },
+  });
+  if (!participant) return null; // not a member (defensive; caller verifies first)
+  if (participant.lastReadMessageId === newest.id) return null; // already read → nothing to do
+
+  await prisma.participant.update({
+    where: { conversationId_userId: { conversationId, userId } },
+    data: { lastReadMessageId: newest.id },
+  });
+  return { messageId: newest.id };
+}
+
+/**
+ * Distinct user ids of everyone `userId` shares a conversation with — the presence fan-out
+ * target (Phase 5.2, D2 contact-scoped). Excludes the user themselves.
+ */
+export async function getConversationPartners(userId: string): Promise<string[]> {
+  const rows = await prisma.participant.findMany({
+    where: {
+      userId: { not: userId },
+      conversation: { participants: { some: { userId } } },
+    },
+    distinct: ['userId'],
+    select: { userId: true },
+  });
+  return rows.map((r) => r.userId);
 }

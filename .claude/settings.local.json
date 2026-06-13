@@ -43,7 +43,21 @@
       "Bash(echo \"exit:$?\")",
       "Bash(node \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\smoke_messaging.mjs\")",
       "Bash(cmd //c \"taskkill /F /T /PID 24612\")",
-      "Bash(cmd //c \"taskkill /F /T /PID 13096\")"
+      "Bash(cmd //c \"taskkill /F /T /PID 13096\")",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 27908\" /FO csv)",
+      "Bash(node -e \"console.log\\('socket.io', require\\('socket.io/package.json'\\).version\\)\")",
+      "Bash(curl -s \"http://localhost:3000/socket.io/?EIO=4&transport=polling\")",
+      "Bash(node -e \"console.log\\('socket.io-client', require\\('socket.io-client/package.json'\\).version\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('paths:',Object.keys\\(j.paths\\).length\\);const p=j.components?.schemas?.Conversation?.properties?.participants?.items?.properties||j.components?.schemas?.Conversation;console.log\\('participant has lastReadMessageId:', JSON.stringify\\(j\\).includes\\('lastReadMessageId'\\)\\);}\\)\")",
+      "Bash(node socket-smoke.mjs)",
+      "Bash(node typing-smoke.mjs)",
+      "Bash(node cmp-smoke.mjs)",
+      "Bash(node diag-smoke.mjs)",
+      "Bash(node verify-smoke.mjs)",
+      "Bash(node reg-smoke.mjs)",
+      "Bash(node t2-smoke.mjs)",
+      "Bash(node hb-smoke.mjs)"
     ]
   }
 }

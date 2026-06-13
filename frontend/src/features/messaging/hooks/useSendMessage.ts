@@ -2,28 +2,30 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { conversationsApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
 import {
+  clearMessageFailed,
   insertOptimisticMessage,
-  restoreMessages,
-  snapshotMessages,
+  markMessageFailed,
+  messageExists,
   swapTempMessage,
-  type MessageCacheSnapshot,
 } from '@/lib/messageCache';
+import { patchConversationOnNewMessage } from '@/lib/conversationCache';
 import { useAuthStore } from '@/stores/authStore';
 import type { Message } from '@/types/api';
 
 interface SendMessageVars {
   content: string;
+  // When present, this is a RETRY of a previously-failed message: reuse its temp id instead of
+  // inserting a new optimistic bubble (Phase 5.2 T7).
+  retryTempId?: string;
 }
 
 interface SendMessageContext {
-  snapshot: MessageCacheSnapshot;
   tempId: string | null; // optimistic id (null when not authenticated)
 }
 
-// Send a TEXT message with an optimistic insert (mirrors useCreateComment). The optimistic
-// message is prepended to the newest position; on success the temp is swapped for the real
-// one in place (no flicker), then the conversation list is invalidated so it re-sorts and
-// refreshes its last-message preview.
+// Send a TEXT message with an optimistic insert (mirrors useCreateComment). On success the temp
+// is swapped for the server's real one in place; on FAILURE the optimistic message is kept and
+// marked `failed` (NOT rolled back) so the user can tap to retry (T7 / Messenger pattern).
 export function useSendMessage(conversationId: string) {
   const qc = useQueryClient();
   const me = useAuthStore((s) => s.user);
@@ -32,10 +34,16 @@ export function useSendMessage(conversationId: string) {
     mutationFn: ({ content }) =>
       conversationsApi.sendMessage(conversationId, { contentType: 'TEXT', content }),
 
-    onMutate: async ({ content }) => {
+    onMutate: async ({ content, retryTempId }) => {
       await qc.cancelQueries({ queryKey: queryKeys.messages(conversationId) });
-      const snapshot = snapshotMessages(qc, conversationId);
 
+      // Retry: clear the failed flag on the existing bubble (back to the pending/spinner state).
+      if (retryTempId) {
+        clearMessageFailed(qc, conversationId, retryTempId);
+        return { tempId: retryTempId };
+      }
+
+      // Normal send: insert a fresh optimistic message.
       let tempId: string | null = null;
       if (me) {
         tempId = `temp-${crypto.randomUUID()}`;
@@ -50,21 +58,26 @@ export function useSendMessage(conversationId: string) {
         };
         insertOptimisticMessage(qc, conversationId, optimistic);
       }
-
-      return { snapshot, tempId };
+      return { tempId };
     },
 
     onError: (_err, _vars, ctx) => {
-      if (ctx) restoreMessages(qc, ctx.snapshot);
+      // T7: do NOT roll back. Keep the message on screen, marked failed, so it can be retried.
+      if (ctx?.tempId) markMessageFailed(qc, conversationId, ctx.tempId);
     },
 
     onSuccess: (data, _vars, ctx) => {
-      // Swap the temp message for the server's real one; fall back to a refetch if the temp
-      // was never inserted (e.g. the thread wasn't loaded when sending).
+      // Swap the temp message for the server's real one. If the temp wasn't swapped, the socket
+      // echo (message:new) may have already reconciled it — only refetch when the real message
+      // genuinely isn't in cache.
       const swapped = ctx?.tempId ? swapTempMessage(qc, conversationId, ctx.tempId, data) : false;
-      if (!swapped) qc.invalidateQueries({ queryKey: queryKeys.messages(conversationId) });
-      // Re-sort the conversation list + refresh its last-message preview.
-      qc.invalidateQueries({ queryKey: queryKeys.conversations() });
+      if (!swapped && !messageExists(qc, conversationId, data.id)) {
+        qc.invalidateQueries({ queryKey: queryKeys.messages(conversationId) });
+      }
+      // Patch the conversation list directly (D5: replaces invalidate-on-send) — move-to-top +
+      // preview. Idempotent with the socket echo's identical patch, and keeps the list correct
+      // even if the socket is down.
+      patchConversationOnNewMessage(qc, conversationId, data);
     },
   });
 }

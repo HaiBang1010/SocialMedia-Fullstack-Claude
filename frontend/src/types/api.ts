@@ -231,9 +231,11 @@ export type MessageContentType =
   | 'GIF';
 
 // A conversation member, as returned inside a Conversation (user + admin flag).
+// lastReadMessageId is the member's read cursor — drives the "Seen" indicator (Phase 5.2).
 export interface Participant {
   user: PublicUser;
   isAdmin: boolean;
+  lastReadMessageId: string | null;
 }
 
 // One message. Returned BARE by POST /conversations/:id/messages and inside the
@@ -246,6 +248,9 @@ export interface Message {
   content: string | null;
   createdAt: string; // ISO
   sender: PublicUser;
+  // Client-only (Phase 5.2 T7): set on an optimistic message whose send failed, so the bubble
+  // can show a "Failed — tap to retry" affordance. Never sent by the server.
+  failed?: boolean;
 }
 
 // A DIRECT (1-1) or GROUP conversation. name/avatarUrl are GROUP-only. lastMessage is
@@ -271,6 +276,41 @@ export interface ConversationListResponse {
 export interface MessagesListResponse {
   messages: Message[];
   nextCursor: string | null;
+}
+
+// ── Realtime socket payloads (Phase 5.2) ───────────────────────────────
+// Server → Client event payloads (see ARCHITECTURE §5 for the full contract).
+
+export interface MessageNewPayload {
+  conversationId: string;
+  message: Message;
+}
+
+export interface TypingUserPayload {
+  conversationId: string;
+  userId: string;
+  username: string;
+  typing: boolean;
+}
+
+export interface ReadReceiptPayload {
+  conversationId: string;
+  userId: string;
+  lastReadMessageId: string;
+}
+
+export interface PresenceSnapshotPayload {
+  online: string[]; // userIds currently online among my partners
+  lastSeen: Record<string, string>; // userId -> ISO last-seen, for offline partners
+}
+
+export interface PresenceOnlinePayload {
+  userId: string;
+}
+
+export interface PresenceOfflinePayload {
+  userId: string;
+  lastSeenAt: string; // ISO
 }
 
 // ── Likes / Follows ────────────────────────────────────────────────────

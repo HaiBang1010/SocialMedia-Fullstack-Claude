@@ -19,6 +19,7 @@ model User {
   bio          String?  @db.VarChar(160)
   avatarUrl    String?
   isPrivate    Boolean  @default(false)
+  lastSeenAt   DateTime? // Phase 5.2 — set on socket disconnect; powers presence "last seen"
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

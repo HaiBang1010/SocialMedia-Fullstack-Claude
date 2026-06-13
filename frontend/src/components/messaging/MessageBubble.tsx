@@ -5,14 +5,21 @@ import type { Message } from '@/types/api';
 interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
+  // Phase 5.2 — render a "Seen" line under this (own) message. MessageThread decides which one
+  // message in the thread gets it (the newest own message the other participant has read).
+  showSeen?: boolean;
+  // Phase 5.2 (T7) — retry a failed send. Called with this message (reuses its temp id).
+  onRetry?: (message: Message) => void;
 }
 
-export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
-  // Optimistic messages carry a temp- id until the server responds.
-  const isPending = message.id.startsWith('temp-');
+export default function MessageBubble({ message, isOwn, showSeen, onRetry }: MessageBubbleProps) {
+  const isFailed = message.failed === true;
+  // Optimistic messages carry a temp- id until the server responds (a failed one is no longer
+  // "pending" — it shows the retry affordance instead of a spinner).
+  const isPending = message.id.startsWith('temp-') && !isFailed;
 
   return (
-    <div className={cn('flex', isOwn ? 'justify-end' : 'justify-start')}>
+    <div className={cn('flex flex-col', isOwn ? 'items-end' : 'items-start')}>
       <div
         className={cn(
           // Width is capped by the parent burst column (max-w-[80%]); the bubble itself
@@ -24,6 +31,7 @@ export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
             ? 'rounded-br-sm bg-primary text-primary-foreground'
             : 'rounded-bl-sm bg-muted text-foreground',
           isPending && 'opacity-60',
+          isFailed && 'opacity-70 ring-1 ring-destructive',
         )}
       >
         {message.content}
@@ -34,6 +42,17 @@ export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
           />
         )}
       </div>
+      {isFailed ? (
+        <button
+          type="button"
+          onClick={() => onRetry?.(message)}
+          className="mt-0.5 px-1 text-[0.6rem] text-destructive hover:underline"
+        >
+          Failed — tap to retry
+        </button>
+      ) : (
+        showSeen && <span className="mt-0.5 px-1 text-[0.6rem] text-muted-foreground">Seen</span>
+      )}
     </div>
   );
 }

@@ -20,6 +20,7 @@ export const createGroupSchema = z.object({
 export const participantResponseSchema = z.object({
   user: publicUserResponseSchema,
   isAdmin: z.boolean(),
+  lastReadMessageId: z.string().nullable(), // Phase 5.2 — read-receipt cursor
 });
 
 export const conversationResponseSchema = z.object({

@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Send } from "lucide-react";
 import { useSendMessage } from "@/features/messaging/hooks/useSendMessage";
+import { useTypingEmit } from "@/features/messaging/hooks/useTypingEmit";
 
 interface MessageInputProps {
   conversationId: string;
@@ -12,6 +13,7 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
   const [value, setValue] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
   const { mutate, isPending } = useSendMessage(conversationId);
+  const { start: startTyping, stop: stopTyping } = useTypingEmit(conversationId);
 
   const resize = () => {
     const el = taRef.current;
@@ -23,6 +25,7 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
   const send = () => {
     const content = value.trim();
     if (!content || isPending) return;
+    stopTyping(); // stop the typing indicator immediately on send
     mutate({ content });
     setValue("");
     // Reset the textarea height after clearing.
@@ -51,8 +54,10 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
         onChange={(e) => {
           setValue(e.target.value);
           resize();
+          startTyping();
         }}
         onKeyDown={onKeyDown}
+        onBlur={stopTyping}
         rows={1}
         placeholder="Message…"
         aria-label="Message"

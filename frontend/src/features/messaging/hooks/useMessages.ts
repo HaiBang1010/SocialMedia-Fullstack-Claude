@@ -3,9 +3,8 @@ import { conversationsApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
 
 // A conversation's messages (GET /conversations/:id/messages), cursor-paginated newest-first.
-// Polls every 5s as the Phase 5.1 stand-in for realtime (Phase 5.2 swaps this for Socket.io).
-// TanStack v5 pauses the interval while the tab is backgrounded (refetchIntervalInBackground
-// defaults to false) and refetches on focus — so inactive tabs don't keep polling.
+// Phase 5.2 — polling removed: incoming messages now arrive via the socket (message:new patches
+// this cache through insertIncomingMessage), and a dropped socket refetches on reconnect.
 export function useMessages(conversationId: string | undefined) {
   return useInfiniteQuery({
     queryKey: queryKeys.messages(conversationId ?? ''),
@@ -14,6 +13,5 @@ export function useMessages(conversationId: string | undefined) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: !!conversationId,
-    refetchInterval: 5000,
   });
 }

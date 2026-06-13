@@ -6,6 +6,50 @@
 
 ---
 
+## 2026-06-13 — Checkpoint 5.2 follow-up: browser-verify fixes (4 issues)
+
+**Done (BE `tsc` 0 lỗi + FE `tsc -b`/`vite build` 0 lỗi 2068 modules; socket verify smoke 3/3 + regression 5/5 PASS trên server live).** 4 issue phát hiện khi browser-verify, 2 decision chốt (T5 hide-seen-on-reply, T7 failed+retry).
+
+- **Issue 2 (typing) — ROOT CAUSE THẬT**: `socket/index.ts` connection handler `async` **`await getConversationPartners()` chạy TRƯỚC khi đăng ký `socket.on('conversation:join'|'typing'|'message:read')`**. Client emit `conversation:join` ngay sau connect → rơi vào cửa sổ await → listener chưa gắn → **event bị Socket.io DROP** → recipient không vào convo room → typing/read-broadcast mất. `message:new` không dính vì `joinUserRoom` là sync trước await. **Fix**: đăng ký TẤT CẢ `socket.on` đồng bộ TRƯỚC mọi await; presence async chuyển xuống `void (async()=>{…})()` cuối. Diagnostic smoke chứng minh: user-room message:new RECEIVED nhưng convo-room typing MISSING khi join emit ngay lúc connect.
+- **Issue 4 (T7) — offline message lost**: `useSendMessage.onError` gọi `restoreMessages` → xóa optimistic → mất tin. **Fix**: KHÔNG restore; `markMessageFailed` set `Message.failed=true` (giữ trên màn hình). `MessageBubble` failed → ring đỏ + "Failed — tap to retry" → `onRetry(message)` (MessageThread `useSendMessage` mutate `{content, retryTempId}` → `clearMessageFailed` → resend, swap khi success / re-mark khi fail). Bỏ `snapshotMessages`/`restoreMessages`/`MessageCacheSnapshot` (orphan sau đổi).
+- **Issue 1 (T1) — last-seen offline**: `presence:snapshot` chỉ emit `{online}`, không có lastSeen → partner offline-sẵn không hiện "Active X ago". **Fix**: BE snapshot kèm `lastSeen: Record<userId,ISO>` (query `User.lastSeenAt` cho partnerIds). FE `presenceStore.setSnapshot({online,lastSeen})` merge; `ConversationDetail` "Active {rel} ago" (rel==='now' → "Active now").
+- **Issue 3 (T5) — hide Seen on reply** (deviate IG): `MessageThread.seenMessageId` thêm check — nếu recipient gửi message SAU read cursor (`messages.slice(readIdx+1).some(senderId!==me)`) → ẩn Seen (null); else giữ logic positional cũ.
+
+**Verify**: socket verify smoke 3/3 (typing với immediate-join PASS, snapshot lastSeen PASS, B-not-online PASS) + regression 5/5 (presence:online, REST send, message:new, read-receipt, presence:offline+lastSeenAt). Issue 3+4 frontend-logic (build pass) — **cần browser confirm**: retry tap khi offline; Seen biến mất sau khi B reply.
+
+**Next:** Browser verify 2 incognito 4 issue → commit `fix(messaging): typing listener-order + offline retry + last-seen snapshot + hide-seen-on-reply (5.2 follow-up)` thẳng main.
+
+---
+
+## 2026-06-12 — Checkpoint 5.2: Messaging Realtime (Socket.io — message:new + typing + presence + read receipts)
+
+**Done (BE migration `add_user_last_seen_at` applied + `prisma generate` + `tsc` BE 0 lỗi + socket smoke 12/12 PASS; FE `tsc -b` + `vite build` 0 lỗi 2068 modules; OpenAPI vẫn 32 paths. Thay polling 5s bằng Socket.io. Send VẪN REST — socket receive-only.)**
+
+- **Backend (~9 file + 1 migration)**: `User.lastSeenAt DateTime?`. Dep `socket.io@4.8`. Module mới **`src/socket/`** (io/auth/presence/rooms/index — singleton ref + JWT handshake + presence ref-count multi-tab + offline-debounce 5s + room helper). `server.ts` `initSocket(server, env.CORS_ORIGIN)` (attach vào `app.listen()` return, KHÔNG `http.createServer`) + `io.close()` shutdown. `messages.service`: export `isParticipant`, `sendTextMessage` broadcast `emitNewMessage` cuối hàm, thêm `markConversationRead` + `getConversationPartners`. `conversations.service`/`schema` participants thêm `lastReadMessageId`.
+- **Frontend (~13 file)**: `lib/socket.ts` singleton (auth callback đọc token tươi), 3 store (socket/presence/typing), `lib/conversationCache.ts` + `messageCache` extend (insertIncomingMessage dedup + messageExists), 4 hook (useSocketConnection/useGlobalSocketEvents/useConversationSocket/useTypingEmit), `useMessages` bỏ refetchInterval, `useSendMessage` patch list thay invalidate. UI: Avatar online dot, conversationDisplay otherUserId, ConversationListItem/ConversationDetail presence+typing, MessageThread seenMessageId positional, MessageBubble "Seen", MessageInput typing emit, AppLayout mount global hooks.
+
+**5 decision FINAL (D1–D5) + 6 refinement (đã verify):**
+- **D1 send giữ REST** — socket broadcast `message:new` sau DB write; `message:send` C→S unused. Smoke: B nhận message:new đúng content PASS.
+- **D2 presence contact-scoped** — connect emit online cho partners + snapshot cho mình; disconnect (tab cuối, debounce 5s) persist lastSeenAt + offline. Smoke: snapshot/online/offline PASS.
+- **D3 migration `add_user_last_seen_at`** (snake_case) — `User.lastSeenAt DateTime?` nullable.
+- **D4 participant DTO + lastReadMessageId** — read receipt. **Refinement: tính POSITIONAL trong MessageThread** (cuid KHÔNG sort theo thời gian ⇒ KHÔNG so `id >=` lexical), MessageBubble nhận prop `showSeen`. DIRECT only.
+- **D5 conversations-list PATCH** — move-to-top + preview thay invalidate-on-send; incoming cùng patch (idempotent).
+- **Refinement khác**: conversationDisplay `otherUserId`; Avatar relative-wrapper (dot không bị clip); unread badge defer; mount hook ở AppLayout (không App.tsx); KHÔNG sửa conversations.openapi (schema tự lan).
+
+**Lưu ý kỹ thuật — pattern mới 5.2:**
+- **io.ts type-only import socket.io** ⇒ messages.service import emit helper KHÔNG cycle (1 chiều service→io.ts, mirror lib/prisma singleton).
+- **Auth callback (KHÔNG token param)**: `auth:(cb)=>cb({token: store.accessToken})` đọc token tươi mỗi reconnect ⇒ token expiry mid-connection tự fix qua axios-refreshed store, không cần socket refresh path.
+- **Reconnect safety net BẮT BUỘC**: Socket.io self-heal nhưng KHÔNG replay missed message ⇒ `socket.io.on('reconnect')` → `invalidateQueries(['conversations'])` (prefix match list+detail+messages). Điều kiện để bỏ polling an toàn.
+- **Dedup self-echo race**: broadcast chạm cả sender; socket echo có thể về trước REST response ⇒ insertIncomingMessage replace temp (sender+content) thay prepend, onSuccess check messageExists thay invalidate mù.
+- **Presence flicker**: offline debounce 5s server-side + ref-count multi-tab (online 1 lần tab đầu, offline 1 lần tab cuối).
+- **Typing TTL backstop 4s client** phòng mất typing:stop; `socket.to(convoRoom)` exclude người gõ server-side.
+
+**DB note**: socket smoke tạo 2 user `ska_/skb_<base36 ts>` + 1 direct conversation + 1 message — leftover DB dev (vô hại).
+
+**Next:** Browser verify 2 incognito (presence online/offline + last-seen, message realtime <1s không chờ 5s, typing indicator, "Seen", reconnect refetch, multi-tab dedup, dark+mobile). PASS → commit `feat: messaging realtime — socket.io message:new + typing + presence + read receipts (Checkpoint 5.2)` thẳng main. Sau đó Phase 5.3+ (reactions/media/recall/group UI).
+
+---
+
 ## 2026-06-11 — Checkpoint 5.1: Messaging Foundation (Conversation/Message models + REST + responsive UI + optimistic send)
 
 **Done (BE migration applied + `prisma generate` + `tsc` BE 0 lỗi + smoke API 31/31 PASS + OpenAPI 32 path keys; FE `tsc -b` + `vite build` 0 lỗi 2030 modules; browser verify FE 8/8 + bonus PASS; 3 UX fix mid-test). Phase 5 mở màn — KHÔNG Socket.io (defer 5.2), KHÔNG image/video message (defer 5.4).**

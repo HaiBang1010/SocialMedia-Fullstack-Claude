@@ -9,15 +9,18 @@ import { useTypingStore } from '@/stores/typingStore';
 import { useMessages } from '@/features/messaging/hooks/useMessages';
 import { useSendMessage } from '@/features/messaging/hooks/useSendMessage';
 import { groupMessagesByBurst, type MessageBurst } from '@/lib/messageBurst';
-import type { Message } from '@/types/api';
+import type { ConversationType, Message, Participant } from '@/types/api';
 import MessageBubble from './MessageBubble';
 import DateSeparator from './DateSeparator';
 import TypingIndicator from './TypingIndicator';
 
 interface MessageThreadProps {
   conversationId: string;
-  // The other participant's last-read message id (DIRECT only) — drives the "Seen" indicator.
-  otherReadMessageId?: string | null;
+  // Phase 5.2/5.3b — drives the read-receipt indicator. The full participants array (each with
+  // their lastReadMessageId) + the conversation type let the thread compute "Seen" (DIRECT) or
+  // "Seen by N" / "Seen by all" (GROUP) positionally. Undefined while the conversation loads.
+  participants?: Participant[];
+  conversationType?: ConversationType;
 }
 
 const GAP_MS = 60 * 60 * 1000; // insert a separator on a >1h gap between same-day bursts
@@ -29,7 +32,11 @@ function shouldShowSeparator(prev: MessageBurst | undefined, current: MessageBur
   return new Date(current.firstAt).getTime() - new Date(prev.lastAt).getTime() > GAP_MS;
 }
 
-export default function MessageThread({ conversationId, otherReadMessageId }: MessageThreadProps) {
+export default function MessageThread({
+  conversationId,
+  participants,
+  conversationType,
+}: MessageThreadProps) {
   const meId = useAuthStore((s) => s.user?.id);
   const scrollRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
@@ -63,21 +70,45 @@ export default function MessageThread({ conversationId, otherReadMessageId }: Me
 
   const bursts = useMemo(() => groupMessagesByBurst(messages), [messages]);
 
-  // "Seen" goes under the NEWEST own message at-or-before the other person's read cursor. We
-  // compute it positionally (not by comparing ids) because message ids are cuids — not ordered.
-  // T5: once the recipient has replied AFTER reading, hide "Seen" (their reply implies it).
-  const seenMessageId = useMemo(() => {
-    if (!otherReadMessageId || !meId) return null;
-    const readIndex = messages.findIndex((m) => m.id === otherReadMessageId);
-    if (readIndex === -1) return null;
-    // In a DIRECT chat the only other sender is the recipient, so senderId !== meId = "they replied".
-    const recipientRepliedAfter = messages.slice(readIndex + 1).some((m) => m.senderId !== meId);
-    if (recipientRepliedAfter) return null;
-    for (let i = readIndex; i >= 0; i--) {
-      if (messages[i]!.senderId === meId) return messages[i]!.id;
+  // Read-receipt indicator, computed POSITIONALLY (message ids are cuids — not time-ordered — so
+  // we compare positions in the already-sorted `messages` array, never id strings). Returns the
+  // one own message that should carry the label, plus the label text. null = render nothing.
+  // - DIRECT: "Seen" under the newest own message at-or-before the recipient's read cursor; hidden
+  //   once the recipient has replied AFTER reading (T5 — their reply implies they saw it).
+  // - GROUP: "Seen by N" / "Seen by all" under the newest own message read by ≥1 other member. No
+  //   hide-on-reply (the "recipient" is multiple people).
+  const seenInfo = useMemo<{ messageId: string; label: string } | null>(() => {
+    if (!meId || !participants || participants.length === 0) return null;
+    const others = participants.filter((p) => p.user.id !== meId);
+    if (others.length === 0) return null;
+
+    if (conversationType === 'DIRECT') {
+      const otherReadId = others[0]?.lastReadMessageId;
+      if (!otherReadId) return null;
+      const readIndex = messages.findIndex((m) => m.id === otherReadId);
+      if (readIndex === -1) return null;
+      const recipientRepliedAfter = messages.slice(readIndex + 1).some((m) => m.senderId !== meId);
+      if (recipientRepliedAfter) return null;
+      for (let i = readIndex; i >= 0; i--) {
+        if (messages[i]!.senderId === meId) return { messageId: messages[i]!.id, label: 'Seen' };
+      }
+      return null;
+    }
+
+    // GROUP — each other member's read position (−1 when unread / message not loaded / deleted).
+    const readIdxByUser = others.map((p) =>
+      p.lastReadMessageId ? messages.findIndex((m) => m.id === p.lastReadMessageId) : -1,
+    );
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]!.senderId !== meId) continue;
+      const seenCount = readIdxByUser.filter((idx) => idx >= i).length;
+      if (seenCount > 0) {
+        const label = seenCount === others.length ? 'Seen by all' : `Seen by ${seenCount}`;
+        return { messageId: messages[i]!.id, label };
+      }
     }
     return null;
-  }, [messages, otherReadMessageId, meId]);
+  }, [messages, participants, conversationType, meId]);
 
   const newestId = messages.length ? messages[messages.length - 1]!.id : null;
   const prevNewestId = useRef<string | null>(null);
@@ -140,7 +171,7 @@ export default function MessageThread({ conversationId, otherReadMessageId }: Me
               <BurstGroup
                 burst={burst}
                 isOwn={burst.senderId === meId}
-                seenMessageId={seenMessageId}
+                seenInfo={seenInfo}
                 onRetry={onRetry}
               />
             </Fragment>
@@ -158,12 +189,12 @@ export default function MessageThread({ conversationId, otherReadMessageId }: Me
 function BurstGroup({
   burst,
   isOwn,
-  seenMessageId,
+  seenInfo,
   onRetry,
 }: {
   burst: MessageBurst;
   isOwn: boolean;
-  seenMessageId: string | null;
+  seenInfo: { messageId: string; label: string } | null;
   onRetry: (message: Message) => void;
 }) {
   return (
@@ -183,7 +214,7 @@ function BurstGroup({
             key={m.id}
             message={m}
             isOwn={isOwn}
-            showSeen={isOwn && m.id === seenMessageId}
+            showSeenLabel={isOwn && m.id === seenInfo?.messageId ? seenInfo.label : undefined}
             onRetry={onRetry}
           />
         ))}

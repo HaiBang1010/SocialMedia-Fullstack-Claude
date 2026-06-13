@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import Avatar from '@/components/common/Avatar';
+import GroupAvatar from './GroupAvatar';
 import { formatRelativeTime } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import { usePresenceStore } from '@/stores/presenceStore';
@@ -39,12 +40,6 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
     subtitle = rel === 'now' ? 'Active now' : `Active ${rel} ago`;
   }
 
-  // Read receipt cursor: the OTHER participant's last-read message (DIRECT only → "Seen").
-  const otherReadMessageId =
-    conversation && conversation.type === 'DIRECT'
-      ? conversation.participants.find((p) => p.user.id !== meId)?.lastReadMessageId ?? null
-      : null;
-
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b px-4 py-3">
@@ -78,7 +73,11 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
           </Link>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <Avatar user={display.avatarUser} size="sm" online={isOnline} />
+            {conversation?.type === 'GROUP' ? (
+              <GroupAvatar users={conversation.participants.map((p) => p.user)} size="sm" />
+            ) : (
+              <Avatar user={display.avatarUser} size="sm" online={isOnline} />
+            )}
             <div className="flex min-w-0 flex-col">
               <span className="truncate font-medium leading-tight">{display.title}</span>
               {subtitle && (
@@ -91,7 +90,11 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
         )}
       </header>
 
-      <MessageThread conversationId={conversationId} otherReadMessageId={otherReadMessageId} />
+      <MessageThread
+        conversationId={conversationId}
+        conversationType={conversation?.type}
+        participants={conversation?.participants}
+      />
       <MessageInput conversationId={conversationId} />
     </div>
   );

@@ -13,14 +13,14 @@ import type { Message } from '@/types/api';
 interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
-  // Phase 5.2 — render a "Seen" line under this (own) message. MessageThread decides which one
-  // message in the thread gets it (the newest own message the other participant has read).
-  showSeen?: boolean;
+  // Phase 5.2/5.3b — read-receipt label under this (own) message ("Seen" for DIRECT, "Seen by N" /
+  // "Seen by all" for GROUP). MessageThread computes the text + which one message carries it.
+  showSeenLabel?: string;
   // Phase 5.2 (T7) — retry a failed send. Called with this message (reuses its temp id).
   onRetry?: (message: Message) => void;
 }
 
-export default function MessageBubble({ message, isOwn, showSeen, onRetry }: MessageBubbleProps) {
+export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }: MessageBubbleProps) {
   const meId = useAuthStore((s) => s.user?.id);
   const { toggle } = useReactToMessage(message.conversationId);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -113,7 +113,9 @@ export default function MessageBubble({ message, isOwn, showSeen, onRetry }: Mes
           Failed — tap to retry
         </button>
       ) : (
-        showSeen && <span className="px-1 text-[0.6rem] text-muted-foreground">Seen</span>
+        showSeenLabel && (
+          <span className="px-1 text-[0.6rem] text-muted-foreground">{showSeenLabel}</span>
+        )
       )}
     </div>
   );

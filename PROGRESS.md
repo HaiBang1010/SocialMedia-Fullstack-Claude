@@ -6,6 +6,30 @@
 
 ---
 
+## 2026-06-13 — Checkpoint 5.3b + 5.3c: GROUP read receipts UI + GROUP composite avatar (+ 5.3a popover fix)
+
+**Done (BE `tsc` 0 lỗi + group-validation smoke 5/5 trên server live; FE `tsc -b` + `vite build` 0 lỗi 2077 modules; uncommitted trên commit `2517993`). Browser-verify CHƯA chạy.**
+
+- **5.3a popover fix (T2)**: picker render ở góc trên-trái viewport thay vì above bubble. Root cause: custom `PopoverAnchor` + `PopoverTrigger` cùng tồn tại → race mount-order của Radix `hasCustomAnchor` → Trigger unmount internal PopperAnchor lúc flip → positioning reference null → fallback (0,0). Fix: bỏ `PopoverTrigger`, SmilePlus thành plain button (`onClick setPickerOpen`), `PopoverAnchor` (bubble) là anchor DUY NHẤT, `open` controlled. Outside-click/ESC vẫn đóng (PopoverContent → onOpenChange).
+- **5.3b GROUP read receipts UI (FE-only, ZERO backend change)**: `MessageThread` gộp DIRECT+GROUP vào 1 `useMemo` → `seenInfo {messageId, label} | null`. DIRECT giữ "Seen" + hide-on-reply (T5). GROUP: newest own message có ≥1 other đọc → "Seen by N" / "Seen by all" (N = số other có read-index ≥ message index). `ConversationDetail` truyền `participants` + `conversationType` (bỏ `otherReadMessageId`). `MessageBubble` prop `showSeen: boolean` → `showSeenLabel: string`.
+- **5.3c GROUP composite avatar**: BE group min-2-others (`createGroupSchema.participantIds.min(2)` + service dual-gate dedupe/drop-creator `< 2` → 400, message "A group needs at least two other participants"). `GroupAvatar.tsx` (NEW) layout tam giác (2 top + 1 bottom-center; >3 → 2 avatars + "+N" badge), render plain `<img>`/`initials()` trực tiếp (KHÔNG Avatar component), container match single-avatar footprint. `ConversationListItem` + `ConversationDetail` header conditional `type === 'GROUP'`.
+
+**Lưu ý kỹ thuật:**
+- **Radix Popover anchor race**: custom `PopoverAnchor` + `PopoverTrigger` đồng thời → drop positioning ref (picker nhảy top-left dù vẫn mở được qua Trigger). Pattern an toàn = 1 anchor + controlled `open`, KHÔNG Trigger.
+- **GROUP read receipts KHÔNG cần backend**: 5.2 `message:read` handler + `patchReadReceipt` vốn type-agnostic (broadcast convo-room, patch by userId) ⇒ `participants[].lastReadMessageId` luôn fresh trong `conversation(id)` cache ⇒ MessageThread recompute "Seen by N" realtime.
+- **Positional read-receipt (giữ từ 5.2)**: cuid KHÔNG sort theo thời gian ⇒ so index trong mảng `messages` đã-sort, KHÔNG so id string. GROUP KHÔNG apply `recipientRepliedAfter` (recipient là nhiều người).
+- **GroupAvatar render plain img/initials** (KHÔNG Avatar): Avatar min size `xs`=size-6 quá lớn cho circle 16-20px + wrap Avatar trong circle nhỏ gây double rounded/ring layer + clip xấu. Reuse `initials()` export. Triangle = 3 circle absolute corner (`top-0 left-0` / `top-0 right-0` / `bottom-0 left-1/2 -translate-x-1/2`), circle = container/2 nên tile khít.
+- **Group min-2 chỉ gate CREATE**: existing 2-person GROUP (tạo thời `min(1)`) vẫn tồn tại; GroupAvatar render graceful 2 circle top. KHÔNG migration.
+
+**Tech debt phát sinh (đề xuất BACKLOG — chờ xác nhận):**
+1. [backend/conversations] Legacy 2-person GROUP (tạo lúc `min(1)` cũ) còn trong DB sau khi siết `min(2)`. Phase polish: cleanup/convert sang DIRECT hoặc accept (GroupAvatar đã render graceful).
+2. [frontend/messaging] GROUP "Seen by N" hiện chỉ trên newest own message (simple). Messenger-accurate = avatar stack per-message theo điểm đọc từng người — defer (đã chốt D8 5.3b).
+3. [frontend/messaging] Group-create UI chưa có (group tạo qua API/Swagger). D4 message "Group needs at least 2 other people" chưa có form surface — wire ở Phase 5.5 group UI.
+
+**Next:** Browser-verify 5.3b (group read receipts realtime) + 5.3c (composite avatar 3/4+/legacy) + 5.3a popover position. Docs sync (`frontend/CLAUDE.md` 5.3a-fix/5.3b/5.3c, phase rows `CLAUDE.md`/`ARCHITECTURE.md`) chưa viết. Rồi commit + Phase 5.4 (media/voice) hoặc 5.5 (recall/group UI).
+
+---
+
 ## 2026-06-13 — Checkpoint 5.3a: Message Reactions (7-emoji quick set + aggregate chips + optimistic + realtime)
 
 **Done (BE migration `add_message_reactions` applied + `prisma generate` + `tsc` 0 lỗi + reactions smoke 13/13 PASS trên server live + OpenAPI 33 paths [32→+1]; FE `tsc -b` + `vite build` 0 lỗi 2077 modules [+9]).** Long-press (mobile) / hover (desktop) → picker 7 emoji → react; aggregate chips "👍 3  ❤️ 1" dưới bubble; optimistic + socket `message:reaction` realtime. 8 decision FINAL (D1–D8) chốt trước khi code. GROUP "Seen by N" tách **5.3b** (FE-only).

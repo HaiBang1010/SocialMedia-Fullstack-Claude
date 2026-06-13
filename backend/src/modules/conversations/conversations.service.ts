@@ -87,8 +87,8 @@ export async function findOrCreateDirectConversation(meId: string, targetUserId:
  */
 export async function createGroupConversation(creatorId: string, input: CreateGroupInput) {
   const otherIds = [...new Set(input.participantIds)].filter((id) => id !== creatorId);
-  if (otherIds.length === 0) {
-    throw new AppError(400, 'InvalidParticipants', 'A group needs at least one other participant');
+  if (otherIds.length < 2) {
+    throw new AppError(400, 'InvalidParticipants', 'A group needs at least two other participants');
   }
 
   const found = await prisma.user.findMany({

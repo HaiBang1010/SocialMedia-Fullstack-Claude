@@ -67,7 +67,10 @@
       "Bash(echo \"---GEN EXIT: $?---\")",
       "Bash(node tmp-smoke-reactions.mjs)",
       "Bash(rm -f tmp-smoke-reactions.mjs)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/health)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/health)",
+      "Bash(curl -s -o /dev/null -w \"health: %{http_code}\\\\n\" http://localhost:3000/health)",
+      "Bash(node tmp-smoke-group.mjs)",
+      "Bash(rm -f tmp-smoke-group.mjs)"
     ]
   }
 }

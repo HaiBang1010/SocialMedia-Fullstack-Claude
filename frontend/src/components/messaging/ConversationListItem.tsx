@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import Avatar from '@/components/common/Avatar';
+import GroupAvatar from './GroupAvatar';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -33,7 +34,11 @@ export default function ConversationListItem({ conversation, isActive }: Convers
         isActive && 'bg-muted',
       )}
     >
-      <Avatar user={avatarUser} size="md" online={isOnline} />
+      {conversation.type === 'GROUP' ? (
+        <GroupAvatar users={conversation.participants.map((p) => p.user)} size="md" />
+      ) : (
+        <Avatar user={avatarUser} size="md" online={isOnline} />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className="truncate font-medium">{title}</span>

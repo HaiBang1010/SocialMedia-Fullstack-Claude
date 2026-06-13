@@ -9,10 +9,12 @@ export const createDirectSchema = z.object({
 
 /**
  * Create a group conversation. participantIds are the OTHER members (the creator is added
- * automatically as admin). The service dedupes + drops the creator if present.
+ * automatically as admin). A group needs ≥2 other members (so it's a real group, not a 1-1 in
+ * disguise) — Phase 5.3c. The service dedupes + drops the creator, then re-checks ≥2 (catches
+ * duplicates / the creator's own id slipping into the array, which the raw min(2) can't).
  */
 export const createGroupSchema = z.object({
-  participantIds: z.array(z.string().min(1)).min(1),
+  participantIds: z.array(z.string().min(1)).min(2),
   name: z.string().min(1).max(100),
 });
 

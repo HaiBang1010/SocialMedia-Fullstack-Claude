@@ -55,6 +55,7 @@ export function useSendMessage(conversationId: string) {
           content,
           createdAt: new Date().toISOString(),
           sender: me,
+          reactions: [],
         };
         insertOptimisticMessage(qc, conversationId, optimistic);
       }

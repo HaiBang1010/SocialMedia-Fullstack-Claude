@@ -384,6 +384,8 @@ enum NotificationType { LIKE COMMENT FOLLOW MENTION MESSAGE STORY_VIEW }
 > - **Defer models (5.4/5.5/6)**: `MessageMedia`, `MessageReaction`, `Call` (+ enum `CallType`) CHƯA migrate. Migration `create_conversations_and_messages`.
 >
 > **Phase 5.2 — Realtime (Socket.io):** chỉ thêm **`User.lastSeenAt DateTime?`** (nullable, set lúc socket disconnect — drive presence "last seen"). Migration `add_user_last_seen_at`. **KHÔNG model mới** — read receipts reuse `Participant.lastReadMessageId` (đã có 5.1, nay serialize ra DTO + cập nhật realtime qua `message:read`). Presence + typing là **in-memory** (process-lifetime, KHÔNG persist trừ lastSeenAt). Xem §5 cho event contract.
+>
+> **Phase 5.3a — Reactions:** model **`MessageReaction`** đã migrate (migration `add_message_reactions`). Khác bản plan ở trên: thêm **`user User @relation(onDelete: Cascade)`** (D1 — Like/StoryView parity, prevent orphan; plan để `userId` scalar trơ) + `User.messageReactions` + `Message.reactions` back-relation. `@@id([messageId, userId])` (1 reaction/user/message). Endpoint POST/DELETE `/messages/:id/reactions` (standalone `messages.routes.ts` mount `/messages`). Reaction broadcast realtime qua `message:reaction` delta (§5). GROUP read receipts UI ("Seen by N") → Phase 5.3b (FE-only, KHÔNG schema change).
 
 ---
 
@@ -440,8 +442,8 @@ GET    /conversations/:id             # 5.1 — one (participant only → 404 el
 GET    /conversations/:id/messages    # 5.1 — newest-first, cursor (participant → 404 else)
 POST   /conversations/:id/messages    # 5.1 — send TEXT (participant → 403 else)
 DELETE /messages/:id                  # defer 5.5 — thu hồi (soft delete deletedAt)
-POST   /messages/:id/reactions        # defer 5.4
-DELETE /messages/:id/reactions        # defer 5.4
+POST   /messages/:id/reactions        # 5.3a — set/replace reaction (whitelist 7 emoji) → full message
+DELETE /messages/:id/reactions        # 5.3a — remove own reaction (idempotent) → full message
 
 # Media upload (Phase 2)
 POST   /media/presign
@@ -473,6 +475,7 @@ GET    /calls/turn-credentials
 
 // Server → Client
 'message:new'            { conversationId, message }            // → each participant's user room
+'message:reaction'       { conversationId, messageId, userId, emoji }   // 5.3a — delta (emoji null = removed); → each participant's user room
 'typing:user'            { conversationId, userId, username, typing }   // → convo room, excl. typer
 'read-receipt:update'    { conversationId, userId, lastReadMessageId }  // → convo room, excl. reader
 'presence:snapshot'      { online: userId[] }       // → the connecting socket (its online partners)
@@ -481,7 +484,6 @@ GET    /calls/turn-credentials
 
 // ── Deferred ──
 'message:deleted'        { messageId }              // recall — Phase 5.5
-'message:reaction'       { messageId, reaction }    // Phase 5.4
 'notification:new'       { notification }           // Phase 7
 
 // ── Calls — Phase 6 (signaling) ──

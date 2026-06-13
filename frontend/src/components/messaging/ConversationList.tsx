@@ -1,9 +1,9 @@
-import { useRef } from 'react';
-import { MessagesSquare } from 'lucide-react';
-import EmptyState from '@/components/common/EmptyState';
-import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
-import { useConversations } from '@/features/messaging/hooks/useConversations';
-import ConversationListItem from './ConversationListItem';
+import { useRef } from "react";
+import { MessagesSquare } from "lucide-react";
+import EmptyState from "@/components/common/EmptyState";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { useConversations } from "@/features/messaging/hooks/useConversations";
+import ConversationListItem from "./ConversationListItem";
 
 interface ConversationListProps {
   activeId?: string;
@@ -23,7 +23,7 @@ export default function ConversationList({ activeId }: ConversationListProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b px-4 py-4">
+      <header className="shrink-0 border-b px-4 py-[17.5px]">
         <h1 className="font-heading text-xl font-semibold">Messages</h1>
       </header>
 
@@ -41,7 +41,11 @@ export default function ConversationList({ activeId }: ConversationListProps) {
         ) : (
           <>
             {conversations.map((c) => (
-              <ConversationListItem key={c.id} conversation={c} isActive={c.id === activeId} />
+              <ConversationListItem
+                key={c.id}
+                conversation={c}
+                isActive={c.id === activeId}
+              />
             ))}
             <div ref={sentinelRef} aria-hidden className="h-px" />
             {isFetchingNextPage && (

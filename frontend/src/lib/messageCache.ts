@@ -7,7 +7,7 @@
 // reference when nothing changes, so React Query doesn't notify observers needlessly.
 
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
-import type { Message, MessagesListResponse } from '@/types/api';
+import type { Message, MessageReaction, MessagesListResponse } from '@/types/api';
 import { queryKeys } from '@/lib/queryKeys';
 
 // Prepend an (optimistic) message to the FIRST page (newest position). No-op when the
@@ -115,6 +115,38 @@ export function messageExists(qc: QueryClient, conversationId: string, id: strin
     queryKeys.messages(conversationId),
   );
   return !!data?.pages.some((pg) => pg.messages.some((m) => m.id === id));
+}
+
+// Phase 5.3a — replace a message's reactions array via an updater (optimistic local change, the
+// REST onSuccess reconcile, and the socket echo all funnel through here). Mirrors setMessageFailed:
+// returns the SAME references when nothing changes so observers aren't notified needlessly. No-op
+// if the message isn't in the thread cache.
+export function patchMessageReactions(
+  qc: QueryClient,
+  conversationId: string,
+  messageId: string,
+  updater: (current: MessageReaction[]) => MessageReaction[],
+): void {
+  qc.setQueryData<InfiniteData<MessagesListResponse>>(
+    queryKeys.messages(conversationId),
+    (data) => {
+      if (!data) return data;
+      let touched = false;
+      const pages = data.pages.map((page) => {
+        let pageTouched = false;
+        const messages = page.messages.map((m) => {
+          if (m.id !== messageId) return m;
+          const next = updater(m.reactions);
+          if (next === m.reactions) return m;
+          pageTouched = true;
+          touched = true;
+          return { ...m, reactions: next };
+        });
+        return pageTouched ? { ...page, messages } : page;
+      });
+      return touched ? { ...data, pages } : data;
+    },
+  );
 }
 
 // Phase 5.2 (T7) — flip the client-only `failed` flag on an optimistic (temp-id) message.

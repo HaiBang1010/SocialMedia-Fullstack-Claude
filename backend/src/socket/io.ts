@@ -40,6 +40,26 @@ export function emitNewMessage(
   }
 }
 
+/** Broadcast a reaction change to each participant's user room (Phase 5.3a, D5/D6). The payload
+ * is a DELTA: emoji is the new emoji, or null when the reaction was removed. Reaches the actor's
+ * own tabs too (clients reconcile by userId). `reaction.userId` is who reacted. */
+export function emitMessageReaction(
+  conversationId: string,
+  messageId: string,
+  reaction: { userId: string; emoji: string | null },
+  participantIds: string[],
+): void {
+  if (!io) return;
+  for (const userId of participantIds) {
+    io.to(userRoom(userId)).emit('message:reaction', {
+      conversationId,
+      messageId,
+      userId: reaction.userId,
+      emoji: reaction.emoji,
+    });
+  }
+}
+
 /** Tell a user's conversation-partners that they just came online (D2: contact-scoped). */
 export function emitPresenceOnline(userId: string, partnerIds: string[]): void {
   if (!io) return;

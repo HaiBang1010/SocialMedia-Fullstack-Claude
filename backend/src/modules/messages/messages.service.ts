@@ -2,13 +2,15 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
-import { emitNewMessage } from '../../socket/io';
+import { emitNewMessage, emitMessageReaction } from '../../socket/io';
 import type { SendMessageInput } from './messages.schema';
 import type { PaginationInput } from '../posts/posts.schema';
 
-// include dùng chung cho mọi response trả 1 message.
+// include dùng chung cho mọi response trả 1 message. reactions ordered oldest-first so the
+// client's groupReactionsByEmoji keeps a stable first-seen emoji order (Phase 5.3a).
 const messageInclude = {
   sender: { select: publicUserSelect },
+  reactions: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.MessageInclude;
 
 export type MessageRow = Prisma.MessageGetPayload<{ include: typeof messageInclude }>;
@@ -27,6 +29,8 @@ export function serializeMessage(message: MessageRow) {
     content: message.content,
     createdAt: message.createdAt.toISOString(),
     sender: message.sender,
+    // Phase 5.3a — RAW reaction rows (D2); the client aggregates into "👍 3  ❤️ 1".
+    reactions: message.reactions.map((r) => ({ userId: r.userId, emoji: r.emoji })),
   };
 }
 
@@ -111,17 +115,21 @@ export async function sendTextMessage(
   // REST; the socket only fans the result out). Reaches the sender's other tabs too — clients
   // dedup by message.id. No-op if the socket server isn't up.
   const serialized = serializeMessage(message);
-  const participants = await prisma.participant.findMany({
+  emitNewMessage(conversationId, serialized, await getParticipantIds(conversationId));
+
+  return serialized;
+}
+
+/**
+ * Every participant id of a conversation (the socket fan-out target — INCLUDES the actor, so
+ * their own other tabs get the echo too). Reused by sendTextMessage + the reaction writes.
+ */
+export async function getParticipantIds(conversationId: string): Promise<string[]> {
+  const rows = await prisma.participant.findMany({
     where: { conversationId },
     select: { userId: true },
   });
-  emitNewMessage(
-    conversationId,
-    serialized,
-    participants.map((p) => p.userId),
-  );
-
-  return serialized;
+  return rows.map((r) => r.userId);
 }
 
 /**
@@ -165,4 +173,61 @@ export async function getConversationPartners(userId: string): Promise<string[]>
     select: { userId: true },
   });
   return rows.map((r) => r.userId);
+}
+
+/**
+ * Resolve the conversation a message belongs to + assert the caller may react. Returns the
+ * conversationId. 404 if the message is gone; 403 if the caller isn't a participant (reacting
+ * is a WRITE — mirrors sendTextMessage non-participant → 403, per prefer-404-over-403-private).
+ */
+async function assertCanReact(messageId: string, userId: string): Promise<string> {
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { conversationId: true },
+  });
+  if (!message) throw new AppError(404, 'MessageNotFound', 'Message not found');
+  if (!(await isParticipant(message.conversationId, userId))) {
+    throw new AppError(403, 'Forbidden', 'You are not a participant of this conversation');
+  }
+  return message.conversationId;
+}
+
+/** Re-read a message with its full include after a reaction write. 404 if it was deleted mid-flight. */
+async function getMessageWithReactions(messageId: string): Promise<MessageRow> {
+  const message = await prisma.message.findUnique({ where: { id: messageId }, include: messageInclude });
+  if (!message) throw new AppError(404, 'MessageNotFound', 'Message not found');
+  return message;
+}
+
+/**
+ * Set (or replace) the caller's reaction on a message (Phase 5.3a, D3). Upsert on the composite
+ * PK keeps it to one reaction per user — a different emoji replaces the old one. Broadcasts the
+ * delta to every participant's user room (D5/D6) and returns the full updated message (D4).
+ */
+export async function reactToMessage(messageId: string, userId: string, emoji: string) {
+  const conversationId = await assertCanReact(messageId, userId);
+
+  await prisma.messageReaction.upsert({
+    where: { messageId_userId: { messageId, userId } },
+    create: { messageId, userId, emoji },
+    update: { emoji },
+  });
+
+  const serialized = serializeMessage(await getMessageWithReactions(messageId));
+  emitMessageReaction(conversationId, messageId, { userId, emoji }, await getParticipantIds(conversationId));
+  return serialized;
+}
+
+/**
+ * Remove the caller's own reaction (Phase 5.3a). deleteMany is idempotent — un-reacting twice is
+ * a no-op, never an error. Broadcasts the removal delta (emoji: null) and returns the message.
+ */
+export async function removeReaction(messageId: string, userId: string) {
+  const conversationId = await assertCanReact(messageId, userId);
+
+  await prisma.messageReaction.deleteMany({ where: { messageId, userId } });
+
+  const serialized = serializeMessage(await getMessageWithReactions(messageId));
+  emitMessageReaction(conversationId, messageId, { userId, emoji: null }, await getParticipantIds(conversationId));
+  return serialized;
 }

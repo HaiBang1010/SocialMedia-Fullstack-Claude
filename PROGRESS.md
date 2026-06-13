@@ -6,6 +6,45 @@
 
 ---
 
+## 2026-06-13 — Checkpoint 5.3a: Message Reactions (7-emoji quick set + aggregate chips + optimistic + realtime)
+
+**Done (BE migration `add_message_reactions` applied + `prisma generate` + `tsc` 0 lỗi + reactions smoke 13/13 PASS trên server live + OpenAPI 33 paths [32→+1]; FE `tsc -b` + `vite build` 0 lỗi 2077 modules [+9]).** Long-press (mobile) / hover (desktop) → picker 7 emoji → react; aggregate chips "👍 3  ❤️ 1" dưới bubble; optimistic + socket `message:reaction` realtime. 8 decision FINAL (D1–D8) chốt trước khi code. GROUP "Seen by N" tách **5.3b** (FE-only).
+
+- **Backend (~7 file + 1 migration)**: model **`MessageReaction`** (`@@id([messageId,userId])` + `message`/`user` cả 2 `onDelete: Cascade` — D1 Like parity; `Message.reactions` + `User.messageReactions`). `messages.schema`: `REACTION_EMOJIS_BACKEND` (copy byte-for-byte FE) + `reactionSchema z.enum` + `messageResponseSchema.reactions`. `messages.service`: `messageInclude.reactions` (orderBy createdAt asc) + `serializeMessage` map RAW (D2) + `getParticipantIds` helper (extract khỏi sendTextMessage, 3 call site) + `reactToMessage`(upsert/replace) + `removeReaction`(deleteMany idempotent) (auth `assertCanReact`: 404 message gone / 403 non-participant). `conversations.service`: `conversationInclude.messages` include reactions (type parity). **`messages.routes.ts` NEW** (POST/DELETE `/:id/reactions`) mount `/messages` ở server.ts. `messages.openapi` +2 op (1 path key). `io.ts` **`emitMessageReaction`** → user rooms delta (D5/D6).
+- **Frontend (~13 file)**: `npx shadcn add popover` (radix-ui umbrella, v4 ready, 0 adapt). `lib/reactions.ts` (SOURCE `REACTION_EMOJIS` + `groupReactionsByEmoji` + `myReaction`). `types/api.ts` (`MessageReaction` + `Message.reactions` + `MessageReactionPayload`; optimistic Message thêm `reactions:[]`). `api/messages.ts` NEW (`messagesApi`). `hooks/useLongPress.ts` NEW (500ms, cancel-on-move, skip mouse). `useReactToMessage.ts` NEW (optimistic patch + rollback + reconcile + `toggle`). `messageCache.patchMessageReactions` (mirror setMessageFailed). `useGlobalSocketEvents` +`message:reaction` listener. `ReactionPicker`/`ReactionChips` NEW. `MessageBubble` refactor (controlled Popover, anchor=bubble, hover SmilePlus + long-press, `canReact` chặn temp, layout bubble→chips→status, meId local).
+
+**8 decision FINAL:** D1 user-relation cascade (Like parity); D2 RAW DTO `[{userId,emoji}]`; D3 2-endpoint POST/DELETE (toggle client-side); D4 return full message; D5 socket user-rooms; D6 delta payload `{conversationId,messageId,userId,emoji|null}`; D7 shadcn Popover; D8 GROUP "Seen by N" → 5.3b.
+
+**Lưu ý kỹ thuật:**
+- **Emoji byte-exactness**: `❤️` = U+2764 + U+FE0F (variation selector). FE `lib/reactions.ts` là source; BE `REACTION_EMOJIS_BACKEND` copy y nguyên — gõ tay sẽ fail Zod enum match silently.
+- **Type parity serializeMessage**: thêm `reactions` vào `messageInclude` ⇒ PHẢI thêm cả `conversationInclude.messages` (cùng `MessageRow` type), nếu không lastMessage preview vỡ TS. Cost: 1 message/convo mang reactions — negligible.
+- **canReact chặn temp/failed**: react cần real id; optimistic (`temp-`) ẩn trigger + chips. `useSendMessage` optimistic Message thêm `reactions:[]` (type required).
+- **Toggle 1 nguồn**: picker + chip đều `toggle(id, myEmoji, tapped)` → tap-same=remove, khác=replace. Optimistic key theo meId ⇒ rapid clicks settle về click cuối.
+- **EPERM khi generate**: `tsx watch` dev server giữ `query_engine-windows.dll.node` ⇒ `prisma generate` fail EPERM. Phải stop dev server → generate → restart. (Windows file-lock, không phải bug code.)
+
+**Next:** Browser-verify 2 incognito (long-press mobile, hover desktop, optimistic chip, cross-session realtime <1s, toggle off/replace, aggregate, layout order) → Phase **5.3b** GROUP "Seen by N" (FE-only).
+
+---
+
+## 2026-06-13 — Checkpoint 5.2 polish: typing heartbeat + typing-in-thread + date separators + avatar fix + profile links
+
+**Done (FE `tsc -b` + `vite build` 0 lỗi 2068 modules; socket smoke typing/snapshot/regression PASS trên server live; committed `34d2427`). Tiếp theo "5.2 follow-up" — typing vẫn hỏng ở browser sau fix listener-order, root cause thứ 2 + loạt UX polish.**
+
+- **Typing heartbeat (root cause #2)**: listener-order fix (follow-up) CẦN nhưng CHƯA ĐỦ. Sender emit `typing:start` đúng 1 lần (activeRef guard) + receiver TTL 4s tự hết → indicator revert ~4s khi gõ liên tục, và activeRef kẹt true ⇒ không re-emit ⇒ không hiện lại. Fix `useTypingEmit`: **heartbeat re-emit `typing:start` mỗi 2.5s** (< receiver TTL 4s) trong lúc gõ; stop-debounce 3s giữ nguyên.
+- **Typing → đáy MessageThread** (rời header): `TypingIndicator` (text "X is typing" + 3 dots animate, keyframe `typing-dot` ở index.css, no avatar) + auto-scroll giữ trong tầm nhìn khi near-bottom. `ConversationDetail` header subtitle = **presence-only** (bỏ typing logic + `useTypingStore`).
+- **Date separators**: `DateSeparator` + `formatDateSeparator`/`isSameDay` (format.ts). Chèn giữa bursts khi **cross-day HOẶC gap >1h** (first burst = anchor); 24h local + IG-style (Today→`14:07` / `Yesterday` / weekday / `Jun 3` / `Jun 3, 2024`). **Bỏ per-burst timestamp** (`formatRelativeTime(burst.lastAt)`) — consolidate vào separator.
+- **Avatar regression fix**: wrapper 5.2 (relative outer cho online dot) tách `SIZES[size]`→inner còn `className`→outer ⇒ caller truyền `size-16`/`ring-2` qua className gây **gap** (StoryRingItem/StoryBar) + **viền chữ nhật** (StoryBar/StoryViewer ring quanh outer không-rounded). Fix: outer giữ `rounded-full + SIZES[size] + className`, inner `size-full`.
+- **Profile-link navigation**: avatar người-khác trong thread + DIRECT header (avatar/name) → `<Link to=/users/:username>`. `conversationDisplay` thêm `otherUsername`. GROUP header KHÔNG link (group settings defer 5.5); back button tách ngoài Link.
+
+**Lưu ý kỹ thuật:**
+- **Typing đòi 2 fix độc lập**: (1) BE listener-order (receiver phải vào convo room — đăng ký `socket.on` trước await), (2) FE heartbeat (giữ TTL receiver sống). Thiếu 1 trong 2 → typing hỏng theo cách khác nhau (không vào room / revert sau 4s).
+- **Avatar wrapper rule**: khi bọc thêm element ngoài, phải đẩy `size + shape (rounded-full) + className` lên OUTER, inner `size-full`. Nếu để `ring`/`size` từ className rơi lên outer không-rounded/không-size → ring thành hình chữ nhật + size lệch inner. cuid-style twMerge (`size-14`+`size-16`→`size-16`) chỉ đúng khi cùng 1 element.
+- **Render-đúng-nhưng-UI-trống ≠ CSS**: diagnostic typing dùng banner-đỏ unconditional + `display` flag + computed-style loại trừ H1(display)/H2(CSS)/H3(render-condition) → thực ra là typing revert (TTL) do thiếu heartbeat. Subtitle class gốc (`truncate text-xs text-muted-foreground`) chưa bao giờ là bug.
+
+**Next:** Phase 5.3+ (reactions / media / recall / group UI). Browser-verify polish (typing persist khi gõ liên tục, date separator các nhánh, avatar fill ring, profile navigate + back).
+
+---
+
 ## 2026-06-13 — Checkpoint 5.2 follow-up: browser-verify fixes (4 issues)
 
 **Done (BE `tsc` 0 lỗi + FE `tsc -b`/`vite build` 0 lỗi 2068 modules; socket verify smoke 3/3 + regression 5/5 PASS trên server live).** 4 issue phát hiện khi browser-verify, 2 decision chốt (T5 hide-seen-on-reply, T7 failed+retry).

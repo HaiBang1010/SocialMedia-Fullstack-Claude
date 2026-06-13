@@ -30,6 +30,7 @@ model User {
   storyViews   StoryView[]
   sentMessages Message[]
   conversations Participant[]
+  messageReactions MessageReaction[]
   // Follow relation naming is intentionally "inverted" (matches ARCHITECTURE §3):
   // - followers: rows where I am the `following` target  -> people who follow ME
   // - following: rows where I am the `follower`          -> people I follow
@@ -252,8 +253,26 @@ model Message {
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id])
+  reactions    MessageReaction[]
 
   @@index([conversationId, createdAt]) // message-list cursor (newest-first)
+}
+
+// Phase 5.3a — one emoji reaction per (message, user). Composite PK enforces "1 reaction per
+// user per message" (a new emoji replaces the old via upsert). The emoji is gated to a 7-item
+// whitelist at the Zod layer (messages.schema.ts), kept open as a String column. Both relations
+// cascade on delete — mirrors Like / StoryView, so a deleted message or user takes its
+// reactions with it (no orphan rows).
+model MessageReaction {
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId]) // 1 reaction per user per message; leftmost-messageId indexes the lookup
 }
 
 enum MessageContentType {

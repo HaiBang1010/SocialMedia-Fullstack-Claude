@@ -238,6 +238,13 @@ export interface Participant {
   lastReadMessageId: string | null;
 }
 
+// One reaction row on a message (Phase 5.3a, D2: RAW). The client aggregates these into compact
+// chips ("👍 3  ❤️ 1") via lib/reactions.groupReactionsByEmoji. One row per (message, user).
+export interface MessageReaction {
+  userId: string;
+  emoji: string;
+}
+
 // One message. Returned BARE by POST /conversations/:id/messages and inside the
 // messages list. content is null only for deleted/recalled messages (Phase 5.5).
 export interface Message {
@@ -248,6 +255,7 @@ export interface Message {
   content: string | null;
   createdAt: string; // ISO
   sender: PublicUser;
+  reactions: MessageReaction[]; // Phase 5.3a — RAW rows; aggregated client-side for display
   // Client-only (Phase 5.2 T7): set on an optimistic message whose send failed, so the bubble
   // can show a "Failed — tap to retry" affordance. Never sent by the server.
   failed?: boolean;
@@ -297,6 +305,14 @@ export interface ReadReceiptPayload {
   conversationId: string;
   userId: string;
   lastReadMessageId: string;
+}
+
+// Phase 5.3a — a reaction delta. emoji is the new emoji, or null when the user removed theirs.
+export interface MessageReactionPayload {
+  conversationId: string;
+  messageId: string;
+  userId: string;
+  emoji: string | null;
 }
 
 export interface PresenceSnapshotPayload {

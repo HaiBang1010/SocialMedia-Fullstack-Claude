@@ -15,6 +15,7 @@ import commentsRoutes from "./modules/comments/comments.routes";
 import feedRoutes from "./modules/feed/feed.routes";
 import storiesRoutes from "./modules/stories/stories.routes";
 import conversationsRoutes from "./modules/conversations/conversations.routes";
+import messagesRoutes from "./modules/messages/messages.routes";
 import { startArchiveJob } from "./jobs/archiveExpiredStories";
 import { initSocket } from "./socket";
 
@@ -64,6 +65,7 @@ app.use("/comments", commentsRoutes);
 app.use("/feed", feedRoutes);
 app.use("/stories", storiesRoutes);
 app.use("/conversations", conversationsRoutes);
+app.use("/messages", messagesRoutes);
 
 // ── ERROR HANDLERS ────────────────────────────
 app.use(notFoundHandler);

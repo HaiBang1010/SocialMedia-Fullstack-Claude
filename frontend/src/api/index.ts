@@ -17,3 +17,4 @@ export { likesApi } from './likes';
 export { followsApi } from './follows';
 export { storiesApi } from './stories';
 export { conversationsApi } from './conversations';
+export { messagesApi } from './messages';

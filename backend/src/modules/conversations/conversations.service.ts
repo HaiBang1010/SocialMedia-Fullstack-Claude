@@ -14,7 +14,9 @@ const conversationInclude = {
     where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
     take: 1,
-    include: { sender: { select: publicUserSelect } },
+    // reactions kept here too (Phase 5.3a) so serializeMessage's input type matches messageInclude;
+    // the lastMessage preview carries reactions at negligible cost (one message per conversation).
+    include: { sender: { select: publicUserSelect }, reactions: { orderBy: { createdAt: 'asc' } } },
   },
 } satisfies Prisma.ConversationInclude;
 

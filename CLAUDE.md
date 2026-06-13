@@ -7,7 +7,7 @@
 
 App name: Beng
 
-Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 xong (BACKEND: posts/media/follow/like/comment + feed API; FRONTEND: 2.4a/b/c posts UI + 2.5 follow/profile/public profile). **Phase 3 xong** (3.1 carousel ≤5 ảnh + 3.2 video upload/playback + delete/visibility/private + 3.3 nested comments/replies). **Phase 4 Stories ✅ COMPLETE** (4.1 Core + 4.2 viewer nâng cao + 4.3a overlays TEXT/EMOJI + 4.4 archive/cron/profile-ring/view-count/viewers). 4.3b (MENTION/STICKER/TAG + multi-touch scale/rotate) + AudioTrack **defer → BACKLOG**. **Phase 5.1 Messaging Foundation ✅ DONE** (Conversation/Participant/Message models + REST direct/group/list/get/messages + responsive list+detail UI + optimistic send + polling 5s + burst grouping; KHÔNG Socket.io [defer 5.2] / media [defer 5.4]). **Phase 5.2 Messaging Realtime ✅ DONE** (Socket.io: JWT handshake + user/convo rooms + `message:new` broadcast [send VẪN REST] + typing + presence [online + last-seen, contact-scoped] + read receipts; polling 5s đã gỡ; chỉ thêm `User.lastSeenAt`). Tiếp theo: Phase 5.3+ (reactions/media/recall/group UI).
+Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 xong (BACKEND: posts/media/follow/like/comment + feed API; FRONTEND: 2.4a/b/c posts UI + 2.5 follow/profile/public profile). **Phase 3 xong** (3.1 carousel ≤5 ảnh + 3.2 video upload/playback + delete/visibility/private + 3.3 nested comments/replies). **Phase 4 Stories ✅ COMPLETE** (4.1 Core + 4.2 viewer nâng cao + 4.3a overlays TEXT/EMOJI + 4.4 archive/cron/profile-ring/view-count/viewers). 4.3b (MENTION/STICKER/TAG + multi-touch scale/rotate) + AudioTrack **defer → BACKLOG**. **Phase 5.1 Messaging Foundation ✅ DONE** (Conversation/Participant/Message models + REST direct/group/list/get/messages + responsive list+detail UI + optimistic send + polling 5s + burst grouping; KHÔNG Socket.io [defer 5.2] / media [defer 5.4]). **Phase 5.2 Messaging Realtime ✅ DONE** (Socket.io: JWT handshake + user/convo rooms + `message:new` broadcast [send VẪN REST] + typing + presence [online + last-seen, contact-scoped] + read receipts; polling 5s đã gỡ; chỉ thêm `User.lastSeenAt`). **Phase 5.3a Reactions ✅ DONE** (model `MessageReaction` + POST/DELETE `/messages/:id/reactions` [whitelist 7 emoji, upsert/replace] + socket `message:reaction` delta [user rooms] + FE long-press/hover Popover picker + aggregate chips + optimistic). Tiếp theo: Phase 5.3b (GROUP "Seen by N" UI — FE-only), rồi 5.4+ (media/voice/recall/group UI).
 
 ## Cấu trúc
 
@@ -92,7 +92,9 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 | 4.4 Stories archive + cron (isArchived cron 5 phút + archive page + profile ring entry + view count/viewers list) | ✅ Xong → **Phase 4 hoàn thành** (4.3b + AudioTrack defer) |
 | 5.1 Messaging Foundation (Conversation/Message models + REST direct/group/list/get/messages + responsive list+detail UI + optimistic send + polling 5s + burst grouping; KHÔNG Socket.io / media) | ✅ Xong |
 | 5.2 Messaging Realtime (Socket.io infra + JWT handshake + user/convo rooms + message:new broadcast [send REST] + typing + presence [online + last-seen] + read receipts; polling gỡ; + User.lastSeenAt) | ✅ Xong |
-| 5.3-5.5 Messaging (reactions, media/voice, recall, post-share, group UI, GROUP read receipts) | Chưa bắt đầu |
+| 5.3a Messaging Reactions (MessageReaction model + POST/DELETE reactions whitelist 7 emoji + socket message:reaction delta + FE picker/chips/optimistic) | ✅ Xong |
+| 5.3b Messaging GROUP read receipts UI ("Seen by N") — FE-only | Chưa bắt đầu |
+| 5.4-5.5 Messaging (media/voice, recall, post-share, group UI) | Chưa bắt đầu |
 | 6-7 | Chưa bắt đầu |
 
 Khi bạn (Claude) thấy task ngoài phase hiện tại — hỏi user có muốn skip ahead không.

@@ -3,10 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSocketStore } from '@/stores/socketStore';
 import { usePresenceStore } from '@/stores/presenceStore';
 import { getSocket } from '@/lib/socket';
-import { insertIncomingMessage } from '@/lib/messageCache';
+import { insertIncomingMessage, patchMessageReactions } from '@/lib/messageCache';
 import { patchConversationOnNewMessage } from '@/lib/conversationCache';
 import type {
   MessageNewPayload,
+  MessageReactionPayload,
   PresenceOfflinePayload,
   PresenceOnlinePayload,
   PresenceSnapshotPayload,
@@ -33,17 +34,27 @@ export function useGlobalSocketEvents() {
       insertIncomingMessage(qc, p.conversationId, p.message);
       patchConversationOnNewMessage(qc, p.conversationId, p.message);
     };
+    // Phase 5.3a — apply a reaction delta to the thread cache (works whether or not the thread is
+    // open, keeping a warm cache correct). Remove the user's prior entry, then add the new emoji.
+    const onReaction = (p: MessageReactionPayload) => {
+      patchMessageReactions(qc, p.conversationId, p.messageId, (cur) => {
+        const filtered = cur.filter((r) => r.userId !== p.userId);
+        return p.emoji === null ? filtered : [...filtered, { userId: p.userId, emoji: p.emoji }];
+      });
+    };
 
     socket.on('presence:snapshot', onSnapshot);
     socket.on('presence:online', onOnline);
     socket.on('presence:offline', onOffline);
     socket.on('message:new', onMessageNew);
+    socket.on('message:reaction', onReaction);
 
     return () => {
       socket.off('presence:snapshot', onSnapshot);
       socket.off('presence:online', onOnline);
       socket.off('presence:offline', onOffline);
       socket.off('message:new', onMessageNew);
+      socket.off('message:reaction', onReaction);
     };
   }, [qc, status]);
 }

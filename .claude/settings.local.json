@@ -57,7 +57,17 @@
       "Bash(node verify-smoke.mjs)",
       "Bash(node reg-smoke.mjs)",
       "Bash(node t2-smoke.mjs)",
-      "Bash(node hb-smoke.mjs)"
+      "Bash(node hb-smoke.mjs)",
+      "Bash(tasklist)",
+      "Bash(powershell.exe -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"name='node.exe'\\\\\" | Select-Object ProcessId,CommandLine | Format-List\")",
+      "Bash(npx shadcn@latest add popover --yes)",
+      "Bash(echo \"---TSC EXIT: $?---\")",
+      "Bash(taskkill //F //T //PID 3060)",
+      "Bash(taskkill //F //PID 1104)",
+      "Bash(echo \"---GEN EXIT: $?---\")",
+      "Bash(node tmp-smoke-reactions.mjs)",
+      "Bash(rm -f tmp-smoke-reactions.mjs)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/health)"
     ]
   }
 }

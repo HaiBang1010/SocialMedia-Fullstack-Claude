@@ -72,7 +72,8 @@ export interface ProfileResponse {
 // ── Posts ──────────────────────────────────────────────────────────────
 
 export type PostVisibility = 'PUBLIC' | 'FOLLOWERS' | 'PRIVATE';
-export type MediaType = 'IMAGE' | 'VIDEO' | 'VOICE'; // Phase 2 IMAGE, 3.2 VIDEO, 5.4b VOICE
+// Phase 2 IMAGE, 3.2 VIDEO, 5.4b VOICE, 5.4c STICKER/GIF (Giphy-hosted, MessageMedia only).
+export type MediaType = 'IMAGE' | 'VIDEO' | 'VOICE' | 'STICKER' | 'GIF';
 
 // Item inside post.media (mirrors postMediaSchema).
 export interface PostMedia {
@@ -263,6 +264,16 @@ export interface MessageMedia {
   uploadStatus?: 'uploading' | 'done' | 'failed';
 }
 
+// Phase 5.4c — a shared-post preview embedded in a POST_SHARE message. NARROW (not full Post):
+// just the card fields. Click-through fetches the full post + re-checks visibility. null when the
+// shared post was since deleted (FK SetNull → "Post unavailable").
+export interface SharedPostPreview {
+  id: string;
+  caption: string | null;
+  author: Pick<PublicUser, 'id' | 'username' | 'name' | 'avatarUrl'>;
+  firstMedia: Pick<PostMedia, 'type' | 'url' | 'thumbnailUrl'> | null;
+}
+
 // One message. Returned BARE by POST /conversations/:id/messages and inside the
 // messages list. content is null for media-only messages and deleted/recalled ones (5.5).
 export interface Message {
@@ -275,6 +286,7 @@ export interface Message {
   sender: PublicUser;
   reactions: MessageReaction[]; // Phase 5.3a — RAW rows; aggregated client-side for display
   media: MessageMedia[]; // Phase 5.4a — image/video attachments (ordered; [] for text)
+  sharedPost?: SharedPostPreview | null; // Phase 5.4c — POST_SHARE only; null otherwise / deleted
   // Client-only (Phase 5.2 T7): set on an optimistic message whose send failed, so the bubble
   // can show a "Failed — tap to retry" affordance. Never sent by the server.
   failed?: boolean;
@@ -449,19 +461,29 @@ export interface MessageMediaInput {
   type: MediaType;
   order: number;
   url: string;
-  objectKey: string;
-  thumbnailUrl?: string; // required IMAGE/VIDEO, absent for VOICE (enforced server-side)
+  objectKey?: string; // uploaded media only (image/video/voice); absent for STICKER/GIF (Giphy-hosted, 5.4c)
+  thumbnailUrl?: string; // required IMAGE/VIDEO, absent for VOICE/STICKER/GIF (enforced server-side)
   thumbnailObjectKey?: string;
   width?: number;
   height?: number;
   duration?: number; // required for VIDEO/VOICE (enforced server-side)
 }
 
-// POST /conversations/:id/messages (Phase 5.4a). A message carries an optional text caption
-// AND/OR 1..10 media items (images + videos may be mixed). The server derives contentType.
+// POST /conversations/:id/messages (Phase 5.4a; 5.4c adds sharedPostId). A message carries an
+// optional text caption AND/OR 1..10 media items, OR a shared post. The server derives contentType.
 export interface SendMessageInput {
   content?: string;
   media?: MessageMediaInput[];
+  sharedPostId?: string; // Phase 5.4c — share a post; exclusive with media, caption allowed
+}
+
+// Phase 5.4c — one Giphy result (GET /giphy/search|trending), trimmed server-side.
+export interface GiphyItem {
+  id: string;
+  url: string; // animated GIF/sticker
+  previewUrl: string; // still frame
+  width: number;
+  height: number;
 }
 
 // POST /conversations/direct

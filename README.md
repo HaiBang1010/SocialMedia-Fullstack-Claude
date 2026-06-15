@@ -14,7 +14,8 @@ Instagram-like social network — feed, stories, messaging, calls. Build to lear
 | Auth | JWT (access + refresh tokens) |
 | API docs | Swagger UI + OpenAPI 3.1 (schema-first từ Zod) |
 | Storage | S3-compatible (MinIO local) — presigned upload |
-| Real-time (sau này) | Socket.io + Redis |
+| Real-time | Socket.io (active từ Phase 5.2 — message:new, typing, presence, read receipts) |
+| Sticker / GIF | Giphy API qua backend proxy (Phase 5.4c) |
 | Calls (sau này) | WebRTC + simple-peer + TURN server |
 
 ## Cấu trúc dự án
@@ -32,7 +33,7 @@ social-media/
 ├── .claudeignore               ← file Claude Code không đọc
 ├── .gitignore
 │
-├── backend/                    ← Express API (Phase 1–3 backend ĐÃ XONG)
+├── backend/                    ← Express API (Phase 1–5.4 backend ĐÃ XONG — + stories, messaging realtime, media/voice/sticker/GIF, giphy proxy)
 │   ├── CLAUDE.md
 │   ├── README.md               ← setup chi tiết từng bước
 │   ├── docker-compose.yml
@@ -47,7 +48,7 @@ social-media/
 │       ├── middleware/
 │       └── modules/
 │
-└── frontend/                   ← React app (Phase 1–3 FE xong — posts UI + follow + profile + carousel + video + nested comments)
+└── frontend/                   ← React app (Phase 1–5.4 FE xong — posts/carousel/video/comments + stories + messaging realtime + media/voice/sticker/GIF/emoji + post share)
     ├── CLAUDE.md
     └── README.md
 ```
@@ -61,14 +62,14 @@ social-media/
 ```bash
 cd backend
 npm install
-cp .env.example .env       # đổi 2 JWT_SECRET trong file này
+cp .env.example .env       # đổi 2 JWT_SECRET + thêm GIPHY_API_KEY (sticker/GIF, Phase 5.4c)
 docker compose up -d        # khởi Postgres + MinIO
 npx prisma migrate dev      # apply migration
 npm run dev                 # → http://localhost:3000
                             # → http://localhost:3000/docs (Swagger UI)
 ```
 
-### Frontend (Phase 1–3 FE xong)
+### Frontend (Phase 1–5.4 FE xong)
 
 ```bash
 cd frontend
@@ -90,14 +91,15 @@ npm run dev                 # → http://localhost:5173
 | 2 (BE) | Posts core backend: posts CRUD, MinIO upload, follow, like, comment phẳng, feed API | ✅ Xong |
 | 2 (FE) | Posts core frontend: feed, post card, create post, profile grid, like/comment, follow button + profile counts, public profile `/users/:username` | ✅ Xong |
 | 3 | Posts nâng cao: carousel ≤5 ảnh (3.1) + video upload/playback + delete/visibility/private (3.2) + nested comments/replies + @mention (3.3) — sticker/gif defer | ✅ Xong |
-| 4 | Stories (24h expire, archive, overlays) | ⏳ |
-| 5 | Messaging (1-1, group, reactions, recall, share post) | ⏳ |
+| 4 | Stories: 24h expire, viewer + gestures, text/emoji overlays, archive + cron, profile ring, view count/viewers | ✅ Xong |
+| 5.1–5.4 | Messaging: 1-1 + group, Socket.io realtime (typing/presence/read receipts), reactions, media (image/video) + voice, emoji/sticker/GIF (Giphy), post share | ✅ Xong |
+| 5.5 | Messaging: recall (soft-delete) + reply-to + group management UI | ⏳ |
 | 6 | Calls (audio, video, WebRTC) | ⏳ |
 | 7 | Polish (notifications, search, hide bài) | ⏳ |
 
 Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PROGRESS.md`.
 
-## API Endpoints hiện có (Phase 1–3 backend)
+## API Endpoints (core — Phase 1–3 backend)
 
 | Method | Path | Auth | Mô tả |
 |---|---|---|---|
@@ -122,6 +124,11 @@ Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PR
 | GET | `/feed` | ✓ | feed cá nhân hóa (following, 14 ngày, cursor) |
 
 > Mọi response trả post (single / list / feed) kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`. Chi tiết: `backend/CLAUDE.md` + Swagger `/docs`.
+
+**Stories / Messaging / Giphy** (Phase 4–5) — danh sách đầy đủ trong `backend/CLAUDE.md` + Swagger `/docs` (35 path keys):
+- **Stories**: `POST/GET /stories`, `GET /stories/feed`, `POST /stories/:id/view`, `GET /stories/:id/views`, `GET /stories/archive`, `GET /users/:username/stories`, `DELETE /stories/:id`
+- **Conversations & Messages**: `POST /conversations/direct|/group`, `GET /conversations[/:id]`, `GET/POST /conversations/:id/messages`, `POST/DELETE /messages/:id/reactions`
+- **Giphy proxy**: `GET /giphy/search`, `GET /giphy/trending` (sticker + GIF, key server-side)
 
 ## Quy ước project
 

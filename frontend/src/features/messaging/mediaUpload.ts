@@ -17,7 +17,7 @@ import {
 } from '@/lib/video';
 import { runPool } from '@/lib/uploadPool';
 import { VOICE_MIME } from '@/lib/audio';
-import type { MessageMediaInput, PresignRequest } from '@/types/api';
+import type { GiphyItem, MediaType, MessageMediaInput, PresignRequest } from '@/types/api';
 
 export type UploadStatus = 'uploading' | 'done' | 'failed';
 
@@ -26,15 +26,18 @@ export type UploadStatus = 'uploading' | 'done' | 'failed';
 // thumbnail/dimensions (thumbnailBlob/width/height absent → single PUT).
 export interface PreparedAttachment {
   localId: string;
-  type: 'IMAGE' | 'VIDEO' | 'VOICE';
-  file: File; // original, uploaded untouched
-  fileContentType: PresignRequest['contentType'];
+  type: MediaType;
+  // Uploaded media (image/video/voice) carry the original File + its presign contentType. Giphy
+  // items (STICKER/GIF) have neither — they're already-hosted URLs, so `uploaded` is preset below
+  // and uploadAttachments short-circuits without ever touching `file`/`fileContentType`.
+  file?: File;
+  fileContentType?: PresignRequest['contentType'];
   thumbnailBlob?: Blob;
   thumbnailContentType?: PresignRequest['contentType'];
   width?: number;
   height?: number;
   duration?: number; // seconds, video + voice
-  previewUrl: string; // object URL for the optimistic preview (image: original / video: poster / voice: clip)
+  previewUrl: string; // preview URL (image: original objectURL / video: poster / voice: clip / giphy: CDN url)
   uploaded?: MessageMediaInput;
 }
 
@@ -94,6 +97,21 @@ export function prepareVoiceAttachment(blob: Blob, duration: number): PreparedAt
   };
 }
 
+// Build a prepared STICKER/GIF attachment from a Giphy pick (Phase 5.4c). NO upload — the media
+// input is preset (Giphy hosts the asset), so uploadAttachments short-circuits via `uploaded`.
+// previewUrl is the Giphy CDN URL itself (a remote URL — clearPendingAttachments' revokeObjectURL
+// on it is a harmless no-op). objectKey is intentionally absent (third-party hosted).
+export function prepareGiphyAttachment(item: GiphyItem, type: 'STICKER' | 'GIF'): PreparedAttachment {
+  return {
+    localId: `att-${crypto.randomUUID()}`,
+    type,
+    width: item.width,
+    height: item.height,
+    previewUrl: item.url,
+    uploaded: { type, order: 0, url: item.url, width: item.width, height: item.height },
+  };
+}
+
 // Upload all attachments with at most 3 in flight (D3). Each item: presign+PUT original (0–90%)
 // then presign+PUT thumbnail (90–100%). `onItem` reports per-item progress/status (the send hook
 // patches it into the optimistic message). A failed item marks itself 'failed' and re-throws so
@@ -107,13 +125,21 @@ export async function uploadAttachments(
     attachments,
     async (a, order) => {
       if (a.uploaded) {
+        // Already-ready item (resumed retry, or a Giphy sticker/GIF) — no upload, no PUT.
         onItem(order, 100, 'done');
         return a.uploaded;
       }
+      // Everything past here uploads a real File; Giphy items never reach it (they carry `uploaded`).
+      const file = a.file;
+      const fileContentType = a.fileContentType;
+      if (!file || !fileContentType) {
+        onItem(order, 0, 'failed');
+        throw new Error('Attachment is missing its file');
+      }
       try {
         const hasThumb = !!a.thumbnailBlob;
-        const orig = await mediaApi.presign({ contentType: a.fileContentType, size: a.file.size });
-        await uploadToPresignedUrl(orig.uploadUrl, a.file, (p) =>
+        const orig = await mediaApi.presign({ contentType: fileContentType, size: file.size });
+        await uploadToPresignedUrl(orig.uploadUrl, file, (p) =>
           onItem(order, Math.round(p * (hasThumb ? 0.9 : 1)), 'uploading'),
         );
 

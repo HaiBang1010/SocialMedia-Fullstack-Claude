@@ -194,7 +194,7 @@ model PostMedia {                 // Phase 2
   post         Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
-enum MediaType { IMAGE VIDEO VOICE } // VOICE = Phase 5.4b (MessageMedia audio only)
+enum MediaType { IMAGE VIDEO VOICE STICKER GIF } // VOICE=5.4b; STICKER/GIF=5.4c (MessageMedia, Giphy-hosted URL, objectKey null)
 
 model Comment {                   // Phase 2-3
   id          String   @id @default(cuid())
@@ -392,6 +392,8 @@ enum NotificationType { LIKE COMMENT FOLLOW MENTION MESSAGE STORY_VIEW }
 > **Phase 5.2 — Realtime (Socket.io):** chỉ thêm **`User.lastSeenAt DateTime?`** (nullable, set lúc socket disconnect — drive presence "last seen"). Migration `add_user_last_seen_at`. **KHÔNG model mới** — read receipts reuse `Participant.lastReadMessageId` (đã có 5.1, nay serialize ra DTO + cập nhật realtime qua `message:read`). Presence + typing là **in-memory** (process-lifetime, KHÔNG persist trừ lastSeenAt). Xem §5 cho event contract.
 >
 > **Phase 5.3a — Reactions:** model **`MessageReaction`** đã migrate (migration `add_message_reactions`). Khác bản plan ở trên: thêm **`user User @relation(onDelete: Cascade)`** (D1 — Like/StoryView parity, prevent orphan; plan để `userId` scalar trơ) + `User.messageReactions` + `Message.reactions` back-relation. `@@id([messageId, userId])` (1 reaction/user/message). Endpoint POST/DELETE `/messages/:id/reactions` (standalone `messages.routes.ts` mount `/messages`). Reaction broadcast realtime qua `message:reaction` delta (§5). GROUP read receipts UI ("Seen by N") → Phase 5.3b (FE-only, KHÔNG schema change).
+>
+> **Phase 5.4 (a/b/c) — Messaging media:** `MessageMedia` (5.4a Rich model) migrated. `MediaType` extended **+VOICE** (5.4b) **+STICKER/GIF** (5.4c, `ALTER TYPE ADD VALUE`). **5.4c:** `MessageMedia.objectKey` → **nullable** (STICKER/GIF = Giphy-hosted, no S3 key) + `Message.sharedPost Post? @relation("SharedPost", onDelete: SetNull)` wired (sharedPostId scalar existed since 5.1; back-relation `Post.sharedInMessages`). **EMOJI is content-derived** (server `isEmojiOnly` over content graphemes → contentType EMOJI; NOT a MediaType, no media row). `MessageContentType` unchanged (all 8 declared since 5.1). New module **`giphy/`** proxies Giphy (`GIPHY_API_KEY` server-side). Migrations `add_sticker_gif_media_types` + `add_message_shared_post_relation`. OpenAPI 33→35.
 
 ---
 
@@ -450,6 +452,13 @@ POST   /conversations/:id/messages    # 5.1 — send TEXT (participant → 403 e
 DELETE /messages/:id                  # defer 5.5 — thu hồi (soft delete deletedAt)
 POST   /messages/:id/reactions        # 5.3a — set/replace reaction (whitelist 7 emoji) → full message
 DELETE /messages/:id/reactions        # 5.3a — remove own reaction (idempotent) → full message
+# 5.4c — emoji (jumbomoji)/sticker/GIF/post-share all go through POST /conversations/:id/messages:
+#   emoji → content-only (server derives EMOJI); sticker/GIF → media[] type STICKER|GIF (no objectKey);
+#   post-share → body.sharedPostId (exclusive with media; caption optional). No new message route.
+
+# Sticker / GIF (Phase 5.4c — Giphy proxy, key server-side)
+GET    /giphy/search                   # ?q=&type=gif|stickers&limit= (auth required)
+GET    /giphy/trending                 # ?type=gif|stickers&limit= (auth required)
 
 # Media upload (Phase 2)
 POST   /media/presign
@@ -576,7 +585,8 @@ GET    /calls/turn-credentials
 | 4.4 Stories archive | 8 | isArchived cron 5 phút + archive page + profile ring entry + view count/viewers (AudioTrack defer) | ✅ Done → **Phase 4 complete** |
 | 5.1 Messaging Foundation | 9 | Conversation/Message models + REST (direct/group/list/get/messages) + responsive list+detail UI + optimistic send + polling 5s + burst grouping (KHÔNG Socket.io / media) | ✅ Done |
 | 5.2 Messaging Realtime | 10 | Socket.io infra (JWT handshake + user/convo rooms) + message:new broadcast (REST send unchanged) + typing + presence (online + last-seen, contact-scoped) + read receipts; polling removed | ✅ Done |
-| 5.3-5.5 Messaging | 11-12 | Reactions, media/voice, recall, post-share, group UI, GROUP read receipts | ⏳ |
+| 5.3-5.4 Messaging | 11-12 | Reactions + GROUP read receipts (5.3) · media image/video + voice + emoji/sticker/GIF + post-share (5.4) | ✅ Done |
+| 5.5 Messaging | 12 | Recall (soft-delete) + reply-to + group management UI | ⏳ |
 | 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |
 

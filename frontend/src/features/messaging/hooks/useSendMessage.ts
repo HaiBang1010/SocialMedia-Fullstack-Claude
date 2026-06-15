@@ -15,6 +15,7 @@ import {
   getPendingAttachments,
   uploadAttachments,
 } from '@/features/messaging/mediaUpload';
+import { isEmojiOnly } from '@/lib/emoji';
 import { useAuthStore } from '@/stores/authStore';
 import type { Message, MessageContentType, MessageMedia } from '@/types/api';
 
@@ -88,8 +89,22 @@ export function useSendMessage(conversationId: string) {
       if (!me) return { tempId: null };
 
       const media = optimisticMedia(tempId);
+      // Mirror the server's derive (messages.service) so the optimistic bubble matches the real
+      // one — important for EMOJI (giant render) which would otherwise flicker normal→giant on swap.
       const contentType: MessageContentType =
-        media.length === 0 ? 'TEXT' : media.every((m) => m.type === 'VIDEO') ? 'VIDEO' : 'IMAGE';
+        media.length === 0
+          ? isEmojiOnly(content)
+            ? 'EMOJI'
+            : 'TEXT'
+          : media.every((m) => m.type === 'VOICE')
+            ? 'VOICE'
+            : media.every((m) => m.type === 'STICKER')
+              ? 'STICKER'
+              : media.every((m) => m.type === 'GIF')
+                ? 'GIF'
+                : media.every((m) => m.type === 'VIDEO')
+                  ? 'VIDEO'
+                  : 'IMAGE';
 
       const optimistic: Message = {
         id: tempId,

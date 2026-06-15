@@ -78,7 +78,8 @@
       "Bash(powershell.exe *)",
       "Bash(node _smoke_54b.mjs)",
       "Bash(echo \"---exit $?---\")",
-      "Bash(rm -f _smoke_54b.mjs)"
+      "Bash(rm -f _smoke_54b.mjs)",
+      "Bash(npx prisma *)"
     ]
   }
 }

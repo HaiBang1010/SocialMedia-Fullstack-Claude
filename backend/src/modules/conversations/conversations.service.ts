@@ -14,13 +14,19 @@ const conversationInclude = {
     where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
     take: 1,
-    // reactions + media kept here too (5.3a/5.4a) so serializeMessage's input type matches
-    // messageInclude (type parity); the lastMessage preview carries them at negligible cost
-    // (one message per conversation).
+    // reactions + media + sharedPost kept here too (5.3a/5.4a/5.4c) so serializeMessage's input
+    // type matches messageInclude (type parity); the lastMessage preview carries them at
+    // negligible cost (one message per conversation).
     include: {
       sender: { select: publicUserSelect },
       reactions: { orderBy: { createdAt: 'asc' } },
       media: { orderBy: { order: 'asc' } },
+      sharedPost: {
+        include: {
+          author: { select: publicUserSelect },
+          media: { orderBy: { order: 'asc' }, take: 1 },
+        },
+      },
     },
   },
 } satisfies Prisma.ConversationInclude;

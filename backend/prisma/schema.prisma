@@ -52,6 +52,7 @@ model Post {
   media    PostMedia[]
   comments Comment[]
   likes    Like[]
+  sharedInMessages Message[] @relation("SharedPost") // Phase 5.4c — messages that share this post
 
   @@index([authorId, createdAt])
 }
@@ -82,6 +83,8 @@ enum MediaType {
   IMAGE
   VIDEO
   VOICE // Phase 5.4b — voice message audio (MessageMedia only; no thumbnail/dimensions)
+  STICKER // Phase 5.4c — Giphy sticker (MessageMedia only; third-party URL, no objectKey/thumbnail)
+  GIF // Phase 5.4c — Giphy GIF (MessageMedia only; third-party URL, no objectKey/thumbnail)
 }
 
 model Follow {
@@ -237,10 +240,10 @@ model Participant {
 }
 
 // Phase 5.1 — a single message. contentType is declared with the full set for forward
-// compatibility (mirrors StoryItemType's all-5 declaration in 4.3a), but Zod gates it to
-// TEXT in 5.1. replyToId / sharedPostId are scalar-only reference columns (no FK relation
-// yet — like Notification.postId/commentId), wired up when reply-to-message and post-share
-// land in Phase 5.5. deletedAt is the soft-delete (recall) marker, also Phase 5.5.
+// compatibility (mirrors StoryItemType's all-5 declaration in 4.3a). replyToId stays a
+// scalar-only reference column (no FK relation yet — like Notification.postId/commentId),
+// wired up when reply-to-message lands in Phase 5.5. sharedPostId got its FK relation
+// (sharedPost) in Phase 5.4c (post-share). deletedAt is the soft-delete (recall) marker (5.5).
 model Message {
   id             String             @id @default(cuid())
   conversationId String
@@ -248,7 +251,7 @@ model Message {
   contentType    MessageContentType
   content        String?            @db.Text
   replyToId      String? // reply-to-message reference (relation wired in Phase 5.5)
-  sharedPostId   String? // shared-post reference (relation wired in Phase 5.5)
+  sharedPostId   String? // shared-post reference (FK relation `sharedPost` wired in Phase 5.4c)
   deletedAt      DateTime? // soft-delete / recall marker (Phase 5.5)
   createdAt      DateTime           @default(now())
 
@@ -256,6 +259,7 @@ model Message {
   sender       User         @relation(fields: [senderId], references: [id])
   reactions    MessageReaction[]
   media        MessageMedia[] // Phase 5.4a — image/video attachments (1..10, ordered)
+  sharedPost   Post?         @relation("SharedPost", fields: [sharedPostId], references: [id], onDelete: SetNull) // Phase 5.4c — post-share preview; SetNull so the message survives a deleted post
 
   @@index([conversationId, createdAt]) // message-list cursor (newest-first)
 }
@@ -270,8 +274,8 @@ model MessageMedia {
   messageId          String
   type               MediaType // reuse the existing IMAGE/VIDEO enum
   order              Int       @default(0) // 0-indexed carousel order
-  url                String // publicUrl from presign response (original)
-  objectKey          String // S3 key of the original, used to DeleteObject on recall
+  url                String // publicUrl from presign response (original); for STICKER/GIF this is the Giphy CDN URL
+  objectKey          String? // S3 key of the original (recall cleanup); null for STICKER/GIF (Giphy-hosted, Phase 5.4c)
   thumbnailUrl       String? // image thumbnail / video poster (frontend-generated)
   thumbnailObjectKey String? // S3 key of the thumbnail, deleted alongside the media
   width              Int?

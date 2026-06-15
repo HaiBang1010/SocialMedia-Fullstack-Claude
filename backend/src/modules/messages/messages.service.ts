@@ -2,6 +2,8 @@ import { Prisma, MessageContentType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
+import { getViewablePost } from '../posts/posts.service';
+import { isEmojiOnly } from '../../lib/emoji';
 import { emitNewMessage, emitMessageReaction } from '../../socket/io';
 import type { SendMessageInput } from './messages.schema';
 import type { PaginationInput } from '../posts/posts.schema';
@@ -13,6 +15,14 @@ const messageInclude = {
   sender: { select: publicUserSelect },
   reactions: { orderBy: { createdAt: 'asc' } },
   media: { orderBy: { order: 'asc' } },
+  // Phase 5.4c — POST_SHARE preview: the shared post's author + its first media for the card.
+  // null after the post is deleted (FK SetNull). NARROW include — never serialize the full post.
+  sharedPost: {
+    include: {
+      author: { select: publicUserSelect },
+      media: { orderBy: { order: 'asc' }, take: 1 },
+    },
+  },
 } satisfies Prisma.MessageInclude;
 
 export type MessageRow = Prisma.MessageGetPayload<{ include: typeof messageInclude }>;
@@ -45,6 +55,22 @@ export function serializeMessage(message: MessageRow) {
       height: m.height,
       duration: m.duration,
     })),
+    // Phase 5.4c — POST_SHARE preview card (narrow); null for non-share messages and for a
+    // shared post that was since deleted (FK SetNull → "Post unavailable" on the client).
+    sharedPost: message.sharedPost
+      ? {
+          id: message.sharedPost.id,
+          caption: message.sharedPost.caption,
+          author: message.sharedPost.author,
+          firstMedia: message.sharedPost.media[0]
+            ? {
+                type: message.sharedPost.media[0].type,
+                url: message.sharedPost.media[0].url,
+                thumbnailUrl: message.sharedPost.media[0].thumbnailUrl,
+              }
+            : null,
+        }
+      : null,
   };
 }
 
@@ -110,14 +136,31 @@ export async function sendMessage(
 
   const media = input.media ?? [];
   const caption = input.content && input.content.length > 0 ? input.content : null;
-  const contentType: MessageContentType =
-    media.length === 0
-      ? MessageContentType.TEXT
+
+  // Phase 5.4c — post-share gate (E8): you can only share a post YOU can see. getViewablePost
+  // throws 404 when the post is missing or not viewable by the sender (mirrors getPostById). The
+  // recipient may not be able to open it later, but the preview is acceptable (sharer consent).
+  if (input.sharedPostId) {
+    await getViewablePost(input.sharedPostId, senderId);
+  }
+
+  // contentType is DERIVED here, never sent by the client (Phase 5.4a pattern, extended in 5.4c):
+  // shared post → POST_SHARE; emoji-only text → EMOJI (jumbomoji); else by media composition.
+  const contentType: MessageContentType = input.sharedPostId
+    ? MessageContentType.POST_SHARE
+    : media.length === 0
+      ? isEmojiOnly(caption)
+        ? MessageContentType.EMOJI
+        : MessageContentType.TEXT
       : media.every((m) => m.type === 'VOICE') // VOICE is single + exclusive (Phase 5.4b)
         ? MessageContentType.VOICE
-        : media.every((m) => m.type === 'VIDEO')
-          ? MessageContentType.VIDEO
-          : MessageContentType.IMAGE;
+        : media.every((m) => m.type === 'STICKER') // sticker is single + standalone (5.4c)
+          ? MessageContentType.STICKER
+          : media.every((m) => m.type === 'GIF')
+            ? MessageContentType.GIF
+            : media.every((m) => m.type === 'VIDEO')
+              ? MessageContentType.VIDEO
+              : MessageContentType.IMAGE;
 
   const message = await prisma.message.create({
     data: {
@@ -125,6 +168,7 @@ export async function sendMessage(
       senderId,
       contentType,
       content: caption,
+      sharedPostId: input.sharedPostId ?? null,
       ...(media.length
         ? {
             media: {
@@ -132,7 +176,7 @@ export async function sendMessage(
                 type: m.type,
                 order: m.order,
                 url: m.url,
-                objectKey: m.objectKey,
+                objectKey: m.objectKey ?? null, // null for STICKER/GIF (Giphy-hosted)
                 thumbnailUrl: m.thumbnailUrl ?? null,
                 thumbnailObjectKey: m.thumbnailObjectKey ?? null,
                 width: m.width ?? null,

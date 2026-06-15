@@ -6,6 +6,36 @@
 
 ---
 
+## 2026-06-15 — Checkpoint 5.4c: Emoji + Sticker + GIF + Post Share (Phase 5.4 media COMPLETE)
+
+**Done (BE 2 migration `add_sticker_gif_media_types` + `add_message_shared_post_relation` applied + `prisma generate` + `tsc` 0 lỗi + smoke 32/32 PASS trên server live [gồm Giphy proxy LIVE trending + sticker search → 200] + OpenAPI **33→35 paths**; FE `tsc -b` + `vite build` 0 lỗi 2095 modules. + 3 follow-up UX bug fix.)** 1 picker hợp nhất 3 tab **Emoji | Stickers | GIFs** (Popover + toggle tự code) trong MessageInput + bật nút **Share** trên PostCard (modal chọn 1 conversation). Đóng **Phase 5.4** (a/b/c). 8 decision FINAL: Q-Scope (1 phase 4 feature) · Q-Emoji-Source (reuse emoji-mart 4.3a) · Q-Emoji-ContentType (EMOJI standalone giant) · Q-Picker (3 tab Popover) · E1 sticker/GIF exclusive · E2 post-share + caption OK · E3 single-select share · E7 sharedPost FK SetNull · E8 preview leak OK.
+
+- **Backend (~10 file + 2 migration)**: `MediaType` enum **+STICKER +GIF** (migration `add_sticker_gif_media_types`, `ALTER TYPE ADD VALUE`). `MessageMedia.objectKey` → **nullable** + `Message.sharedPost Post? @relation onDelete: SetNull` + `Post.sharedInMessages` (migration `add_message_shared_post_relation`). **KHÔNG migration** cho `MessageContentType` (đủ 8 value từ 5.1) và `sharedPostId` (scalar đã có 5.1, nay wire FK). `lib/emoji.ts` NEW (`isEmojiOnly` + `EMOJI_ONLY_MAX=3` qua `Intl.Segmenter` grapheme + `\p{Extended_Pictographic}`). `config/env.ts` +`GIPHY_API_KEY`. `messages.schema`: `objectKey` optional + `sharedPostId` + superRefine (sharedPost không kèm media; STICKER/GIF exclusive single + no caption; objectKey bắt buộc IMAGE/VIDEO/VOICE) + `sharedPostResponseSchema` (narrow). `messages.service`: `messageInclude.sharedPost` (author + media[0]); `serializeMessage` map narrow card; `sendMessage` derive contentType **+POST_SHARE/EMOJI/STICKER/GIF** + **gate `getViewablePost(sharedPostId, senderId)`** (E8 — chỉ share được cái mình thấy → 404). `conversations.service`: `conversationInclude.messages.sharedPost` (type parity). Module **`giphy/`** NEW (schema/service/routes/openapi) — `GET /giphy/search` + `/giphy/trending` (requireAuth, `fetch` native Node 20 KHÔNG dep mới, `api_key` server-side, transform `fixed_width`/`fixed_width_still`, lỗi 429/5xx/timeout → 503). Mount `/giphy` + wire OpenAPI tag.
+- **Frontend (~14 file)**: `types/api.ts` (`MediaType +STICKER/GIF`, `SharedPostPreview` [narrow, KHÔNG full Post], `Message.sharedPost?`, `SendMessageInput.sharedPostId?`, `GiphyItem`, `MessageMediaInput.objectKey?` optional). `lib/emoji.ts` NEW (parity BE). `api/giphy.ts` NEW (`giphyApi.search/trending`). `mediaUpload.ts`: `PreparedAttachment.file?/fileContentType?` optional + `prepareGiphyAttachment` (**`uploaded` preset ⇒ 0 PUT**, reuse pipeline như voice). `useSendMessage`: optimistic contentType derive +EMOJI/STICKER/GIF/VOICE (tránh flicker giant↔normal). `useSharePost.ts` NEW (no in-thread optimistic, vars `{conversationId, postId, content?}`). `UnifiedMediaPicker.tsx` NEW (3 tab Popover + emoji-mart embed + Giphy masonry grid debounce 400ms/trending). `MessageInput` (nút Smile + `insertAtCursor` + emoji Case A insert / Case B send giant + giphy send standalone). `MessageBubble` 3 nhánh mới (POST_SHARE→SharedPostCard / EMOJI→giant no-bubble / STICKER+GIF→inline img no-lightbox). `SharedPostCard.tsx` NEW (avatar+caption+firstMedia, click `/posts/:id`, null→"Post unavailable"). `SharePostModal.tsx` NEW (mirror StoryViewersModal, list conversations + caption optional). `PostActions` enable Share + `onShare`; `PostCard` state + render modal. `messagePreview` +`📮 Shared a post`/`Sticker`/`GIF`.
+
+**Lưu ý kỹ thuật:**
+- **EMOJI = content-derived, KHÔNG media** (KHÔNG `MediaType` EMOJI). Server derive EMOJI khi `isEmojiOnly(content)` (1–3 grapheme emoji) ⇒ emoji gõ tay LẪN qua picker đều giant; 0 migration. FE mirror helper để optimistic khớp.
+- **Sticker/GIF reuse 5.4a 100%** qua `PreparedAttachment.uploaded` preset (như voice nhưng 0 PUT thay 1) — objectKey null (Giphy host).
+- **Type parity (lại bài 5.3a/5.4a)**: `sharedPost` vào `messageInclude` ⇒ BẮT BUỘC `conversationInclude.messages.sharedPost`.
+- **Post-share tách `useSharePost`** (KHÔNG extend `useSendMessage` vốn bind conversationId) — share gửi từ feed, target chọn động, không xem thread ⇒ không cần optimistic in-thread.
+- **Share gate = `getViewablePost(postId, senderId)`** (reuse posts.service) — 404 nếu sender không xem được (E8: recipient lộ preview chấp nhận, click-through vẫn gate 404).
+- **Giphy `fetch` native** (Node 20) — KHÔNG thêm axios/got (tuân rule "hỏi trước khi thêm dep").
+
+**3 follow-up bug fix (sau implement):**
+1. **Reaction đẩy message không auto-scroll (Bug 1)** + **thiếu nút scroll-to-bottom (Bug 2)** — `MessageThread`: `atBottomRef` (cập nhật qua `onScroll`) + nhánh `useLayoutEffect` "content cao lên khi đang ở bottom → stick"; nút nổi `ChevronDown` `absolute bottom-4 right-4` hiện khi `dist>200`, smooth scroll. Bọc scroll container trong `relative` parent. Unread badge defer polish.
+2. **POST_SHARE "Seen" realtime KHÔNG hiện (Bug 3)** — root cause: share gửi NGOÀI thread ⇒ A không vào convo room ⇒ miss `read-receipt:update` (emit convo-room only); `staleTime:30s` serve cursor cũ khi mở thread (F5 fix vì reload). Fix 1 dòng: `useSharePost.onSuccess` thêm `invalidateQueries(conversation(id))` ⇒ mở thread refetch participants tươi. KHÔNG đụng MessageBubble (indicator vốn dùng chung mọi contentType — đúng).
+3. **Emoji-mart tab chỉ ~70% width** — root cause: `dynamicWidth` đo wrapper shrink-to-fit; `className="width-full"` no-op. Fix: scoped CSS `.emoji-picker-full > *, .emoji-picker-full em-emoji-picker { width:100% }` (index.css) + wrap `<div className="emoji-picker-full w-full">`. **Scoped** để story `EmojiPickerOverlay` (natural width) KHÔNG regress.
+
+**Tech debt phát sinh (đề xuất BACKLOG):**
+1. [frontend/messaging] Share multi-select N conversations (hiện single-select) — defer polish.
+2. [frontend/messaging] Scroll-to-bottom unread-count badge (đếm message:new lúc scroll-up) — defer polish.
+3. [backend/giphy] Rate limit per-user (hiện chỉ FE debounce + free-tier key) — defer polish.
+4. [frontend/messaging] Sticker/GIF picker autoplay perf (grid render animated trực tiếp) — defer.
+
+**Next:** Browser-verify còn lại 5.4c (emoji insert/giant, sticker/gif send + inline, share modal → SharedPostCard nav, T4 story emoji width KHÔNG regress) → commit. Phase 5.4 ✅ COMPLETE. Tiếp: **5.5** (recall soft-delete + reply-to + group management UI).
+
+---
+
 ## 2026-06-15 — Checkpoint 5.4b: Voice Messages
 
 **Done (BE migration `add_voice_media_type` applied + `prisma generate` + `tsc` 0 lỗi + voice smoke 14/14 PASS trên server live + OpenAPI 33 paths giữ nguyên; FE `tsc -b` + `vite build` 0 lỗi). Browser-verify CHƯA chạy.** Tap mic → ghi âm (MediaRecorder WebM/Opus) → tap send để stop + auto-send → bubble voice player + 30 thanh sóng trang trí fill theo playback. Optimistic local playback. 5 decision FINAL: Q1 tap-to-toggle · Q2 MediaRecorder WebM/Opus (no dep) · Q3 HYBRID 30-bar deterministic · Q4 max 300s · Q5 optimistic reuse 5.4a.

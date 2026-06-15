@@ -26,6 +26,10 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(8),
   S3_BUCKET: z.string().min(1),
   S3_PUBLIC_URL: z.string().url(),
+
+  // ── Giphy (Phase 5.4c — sticker/GIF proxy) ──
+  // Server-side key; the backend proxies search/trending so the key never reaches the client.
+  GIPHY_API_KEY: z.string().min(1),
 });
 
 const parsed = envSchema.safeParse(process.env);

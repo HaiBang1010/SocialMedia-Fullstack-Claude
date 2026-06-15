@@ -1,5 +1,6 @@
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ChevronDown } from 'lucide-react';
 import Avatar from '@/components/common/Avatar';
 import { cn } from '@/lib/utils';
 import { isSameDay } from '@/lib/format';
@@ -115,6 +116,23 @@ export default function MessageThread({
   const prevNewestId = useRef<string | null>(null);
   const prevScrollHeight = useRef(0);
   const loadingOlder = useRef(false);
+  // Whether the viewport is pinned to (near) the bottom — captured on scroll so the layout effect
+  // can decide to re-stick after content GROWS in place (e.g. a reaction chip — Bug 1). Also drives
+  // the floating "scroll to latest" button (Bug 2).
+  const atBottomRef = useRef(true);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    atBottomRef.current = distance < 120; // "near bottom" — keep sticking through content growth
+    setShowScrollBtn(distance > 200); // React bails out when the boolean is unchanged
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, []);
 
   // Load older messages when the top sentinel appears. Capture scrollHeight first so the
   // layout effect can restore the viewport (prepending at the top would otherwise jump).
@@ -136,6 +154,10 @@ export default function MessageThread({
       el.scrollTop = el.scrollHeight - prevScrollHeight.current;
       loadingOlder.current = false;
     } else if (newestId !== prevNewestId.current) {
+      el.scrollTop = el.scrollHeight; // new message / initial load
+    } else if (atBottomRef.current) {
+      // Same newest message but the list re-rendered taller in place (e.g. a reaction chip added
+      // height to the bottom bubble). If the user was pinned to the bottom, stay there (Bug 1).
       el.scrollTop = el.scrollHeight;
     }
     prevNewestId.current = newestId;
@@ -150,37 +172,51 @@ export default function MessageThread({
   }, [typingActive]);
 
   return (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-      <div ref={topRef} aria-hidden className="h-px" />
-      {isFetchingNextPage && (
-        <p className="py-2 text-center text-xs text-muted-foreground">Loading…</p>
-      )}
+    <div className="relative min-h-0 flex-1">
+      <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto px-4 py-4">
+        <div ref={topRef} aria-hidden className="h-px" />
+        {isFetchingNextPage && (
+          <p className="py-2 text-center text-xs text-muted-foreground">Loading…</p>
+        )}
 
-      {isLoading ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Loading messages…</p>
-      ) : isError ? (
-        <p className="py-6 text-center text-sm text-destructive">Couldn't load messages.</p>
-      ) : messages.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">No messages yet. Say hi 👋</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {bursts.map((burst, idx) => (
-            <Fragment key={burst.messages[0]!.id}>
-              {shouldShowSeparator(bursts[idx - 1], burst) && (
-                <DateSeparator iso={burst.firstAt} />
-              )}
-              <BurstGroup
-                burst={burst}
-                isOwn={burst.senderId === meId}
-                seenInfo={seenInfo}
-                onRetry={onRetry}
-              />
-            </Fragment>
-          ))}
-        </div>
-      )}
+        {isLoading ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Loading messages…</p>
+        ) : isError ? (
+          <p className="py-6 text-center text-sm text-destructive">Couldn't load messages.</p>
+        ) : messages.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No messages yet. Say hi 👋</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {bursts.map((burst, idx) => (
+              <Fragment key={burst.messages[0]!.id}>
+                {shouldShowSeparator(bursts[idx - 1], burst) && (
+                  <DateSeparator iso={burst.firstAt} />
+                )}
+                <BurstGroup
+                  burst={burst}
+                  isOwn={burst.senderId === meId}
+                  seenInfo={seenInfo}
+                  onRetry={onRetry}
+                />
+              </Fragment>
+            ))}
+          </div>
+        )}
 
-      {typingActive && <TypingIndicator usernames={typingNames} />}
+        {typingActive && <TypingIndicator usernames={typingNames} />}
+      </div>
+
+      {/* Bug 2 — floating jump-to-latest, shown only when scrolled up past ~200px. */}
+      {showScrollBtn && (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          aria-label="Scroll to latest messages"
+          className="absolute bottom-4 right-4 z-10 flex size-9 items-center justify-center rounded-full border bg-background text-foreground shadow-md transition-colors hover:bg-muted"
+        >
+          <ChevronDown className="size-5" />
+        </button>
+      )}
     </div>
   );
 }

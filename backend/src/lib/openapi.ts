@@ -74,6 +74,7 @@ function registerAll() {
   // Messages registered before Conversations so the Conversation schema $refs Message.
   const { registerMessagesOpenApi } = require('../modules/messages/messages.openapi');
   const { registerConversationsOpenApi } = require('../modules/conversations/conversations.openapi');
+  const { registerGiphyOpenApi } = require('../modules/giphy/giphy.openapi');
   const { registerHealthOpenApi } = require('./health.openapi');
   registerAuthOpenApi(registry);
   registerUsersOpenApi(registry);
@@ -86,6 +87,7 @@ function registerAll() {
   registerStoriesOpenApi(registry);
   registerMessagesOpenApi(registry);
   registerConversationsOpenApi(registry);
+  registerGiphyOpenApi(registry);
   registerHealthOpenApi(registry);
   registered = true;
 }
@@ -113,6 +115,7 @@ export function buildOpenApiDocument() {
       { name: 'Stories', description: 'Ephemeral 24-hour stories' },
       { name: 'Conversations', description: 'Direct + group conversations' },
       { name: 'Messages', description: 'Messages within a conversation' },
+      { name: 'Giphy', description: 'Sticker + GIF search/trending proxy' },
       { name: 'Meta' },
     ],
   });

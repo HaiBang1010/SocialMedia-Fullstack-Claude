@@ -183,6 +183,17 @@
     animation: typing-dot 1.4s infinite ease-in-out;
 }
 
+/* Phase 5.4c — make the messaging emoji picker (UnifiedMediaPicker) fill the 340px popover.
+   emoji-mart's `dynamicWidth` measures the element it mounts into, which is otherwise shrink-to-fit
+   and laid the grid out at ~70%. Forcing the react wrapper + the <em-emoji-picker> host to 100%
+   makes that measurement equal the container, so the grid fills. SCOPED to `.emoji-picker-full`
+   ON PURPOSE — the story EmojiPickerOverlay relies on emoji-mart's natural width and must NOT be
+   touched (no global `em-emoji-picker` rule). */
+.emoji-picker-full > *,
+.emoji-picker-full em-emoji-picker {
+    width: 100%;
+}
+
 /* Custom scrollbar — thin, theme-aware, transparent track. Gray + alpha (not a brand/var
    token) so it reads correctly in BOTH light and dark without a per-theme override.
    Elements opting into `.scrollbar-hide` keep their scrollbar hidden (higher specificity). */

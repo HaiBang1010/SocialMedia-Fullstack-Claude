@@ -42,9 +42,11 @@ const messageMediaInputSchema = z.object({
   type: z.nativeEnum(MediaType),
   order: z.number().int().min(0),
   url: z.string().url(),
-  objectKey: z.string().min(1),
-  // thumbnail required for IMAGE/VIDEO, absent for VOICE (audio has no thumbnail) — enforced
-  // per-type in sendMessageSchema's superRefine below.
+  // objectKey is the S3 cleanup key for UPLOADED media (image/video/voice). Optional because
+  // STICKER/GIF are Giphy-hosted third-party URLs with no S3 object (Phase 5.4c). Required per-type
+  // in sendMessageSchema's superRefine below.
+  objectKey: z.string().min(1).optional(),
+  // thumbnail required for IMAGE/VIDEO, absent for VOICE/STICKER/GIF — enforced per-type below.
   thumbnailUrl: z.string().url().optional(),
   thumbnailObjectKey: z.string().min(1).optional(),
   width: z.number().int().positive().optional(),
@@ -62,13 +64,26 @@ export const sendMessageSchema = z
   .object({
     content: z.string().trim().max(5000).optional(),
     media: z.array(messageMediaInputSchema).max(MAX_MESSAGE_MEDIA).optional(),
+    // Phase 5.4c — share a post into the conversation. Exclusive with media; a caption is allowed
+    // (E2). The server validates viewability + derives contentType POST_SHARE.
+    sharedPostId: z.string().cuid().optional(),
   })
   .superRefine((data, ctx) => {
     const media = data.media ?? [];
-    if (!data.content && media.length === 0) {
+    const hasContent = !!data.content && data.content.length > 0;
+
+    if (!hasContent && media.length === 0 && !data.sharedPostId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'A message must have text content or at least one media item',
+        message: 'A message must have text content, media, or a shared post',
+      });
+    }
+    // A shared post is its own message — never combined with media (a caption is allowed).
+    if (data.sharedPostId && media.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sharedPostId'],
+        message: 'A shared post cannot be combined with media',
       });
     }
     // VOICE is exclusive: a single voice clip, never combined with image/video or another voice.
@@ -77,6 +92,14 @@ export const sendMessageSchema = z
         code: z.ZodIssueCode.custom,
         path: ['media'],
         message: 'A voice message cannot be combined with other media',
+      });
+    }
+    // STICKER/GIF is a standalone message: exactly one item, no caption, no other media (E1).
+    if (media.some((m) => m.type === 'STICKER' || m.type === 'GIF') && (media.length > 1 || hasContent)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['media'],
+        message: 'A sticker or GIF must be sent on its own (no caption or other media)',
       });
     }
     media.forEach((m, i) => {
@@ -92,6 +115,14 @@ export const sendMessageSchema = z
           code: z.ZodIssueCode.custom,
           path: ['media', i, 'thumbnailUrl'],
           message: 'thumbnailUrl and thumbnailObjectKey are required for image/video media',
+        });
+      }
+      // objectKey backs S3 recall-cleanup for uploaded media; STICKER/GIF are Giphy-hosted (no key).
+      if ((m.type === 'IMAGE' || m.type === 'VIDEO' || m.type === 'VOICE') && !m.objectKey) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['media', i, 'objectKey'],
+          message: 'objectKey is required for uploaded media',
         });
       }
     });
@@ -117,6 +148,22 @@ export const messageMediaResponseSchema = z.object({
   duration: z.number().int().nullable(),
 });
 
+// Phase 5.4c — a shared-post preview embedded in a POST_SHARE message. NARROW: just enough to
+// render the card (author + caption + first media thumbnail). Click-through fetches the full post
+// and re-checks visibility. null when the post was deleted (FK SetNull).
+export const sharedPostResponseSchema = z.object({
+  id: z.string(),
+  caption: z.string().nullable(),
+  author: publicUserResponseSchema,
+  firstMedia: z
+    .object({
+      type: z.nativeEnum(MediaType),
+      url: z.string(),
+      thumbnailUrl: z.string().nullable(),
+    })
+    .nullable(),
+});
+
 export const messageResponseSchema = z.object({
   id: z.string(),
   conversationId: z.string(),
@@ -127,6 +174,8 @@ export const messageResponseSchema = z.object({
   sender: publicUserResponseSchema,
   reactions: z.array(messageReactionResponseSchema),
   media: z.array(messageMediaResponseSchema),
+  // Phase 5.4c — present (object or null) only meaningful for POST_SHARE; null otherwise.
+  sharedPost: sharedPostResponseSchema.nullable(),
 });
 
 // GET /conversations/:id/messages — newest-first, cursor-paginated.

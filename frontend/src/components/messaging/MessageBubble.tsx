@@ -11,6 +11,7 @@ import ReactionPicker from './ReactionPicker';
 import ReactionChips from './ReactionChips';
 import MessageMediaGrid from './MessageMediaGrid';
 import VoicePlayer from './VoicePlayer';
+import SharedPostCard from './SharedPostCard';
 import type { Message } from '@/types/api';
 
 interface MessageBubbleProps {
@@ -32,6 +33,11 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
   const mediaItems = message.media ?? [];
   const hasMedia = mediaItems.length > 0;
   const isVoice = mediaItems.length === 1 && mediaItems[0]!.type === 'VOICE';
+  // Phase 5.4c — standalone content kinds rendered without the usual bubble chrome.
+  const isPostShare = message.contentType === 'POST_SHARE';
+  const isJumbomoji = message.contentType === 'EMOJI';
+  const isStickerOrGif =
+    mediaItems.length === 1 && (mediaItems[0]!.type === 'STICKER' || mediaItems[0]!.type === 'GIF');
   const isFailed = message.failed === true;
   // Optimistic messages carry a temp- id until the server responds (a failed one is no longer
   // "pending" — it shows the retry affordance instead of a spinner).
@@ -58,7 +64,21 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
               {...(canReact ? longPress : {})}
               className={cn('flex flex-col gap-1', isOwn ? 'items-end' : 'items-start')}
             >
-              {isVoice ? (
+              {isPostShare ? (
+                <div className={cn(isFailed && 'rounded-xl ring-1 ring-destructive')}>
+                  <SharedPostCard sharedPost={message.sharedPost ?? null} />
+                </div>
+              ) : isStickerOrGif ? (
+                <img
+                  src={mediaItems[0]!.url}
+                  alt={mediaItems[0]!.type === 'GIF' ? 'GIF' : 'Sticker'}
+                  className={cn(
+                    'max-h-60 w-auto rounded-lg',
+                    isPending && 'opacity-60',
+                    isFailed && 'ring-1 ring-destructive',
+                  )}
+                />
+              ) : isVoice ? (
                 <div className={cn(isFailed && 'rounded-2xl ring-1 ring-destructive')}>
                   <VoicePlayer media={mediaItems[0]!} isOwn={isOwn} />
                 </div>
@@ -67,7 +87,13 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
                   <MessageMediaGrid media={mediaItems} onOpen={(i) => openLightbox(mediaItems, i)} />
                 </div>
               ) : null}
-              {message.content && (
+              {/* Jumbomoji (Phase 5.4c): an emoji-only message renders large, no bubble background. */}
+              {isJumbomoji && message.content && (
+                <div className={cn('px-1 text-6xl leading-none', isPending && 'opacity-60')}>
+                  {message.content}
+                </div>
+              )}
+              {message.content && !isJumbomoji && (
                 <div
                   className={cn(
                     // Width is capped by the parent burst column (max-w-[80%]); the bubble itself

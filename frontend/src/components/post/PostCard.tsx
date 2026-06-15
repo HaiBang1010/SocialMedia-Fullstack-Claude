@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { Post } from '@/types/api';
 import { formatRelativeTime } from '@/lib/format';
@@ -6,6 +7,7 @@ import Avatar from '@/components/common/Avatar';
 import PostCarousel from './PostCarousel';
 import PostVideo from './PostVideo';
 import PostActions from './PostActions';
+import SharePostModal from './SharePostModal';
 
 interface PostCardProps {
   post: Post;
@@ -18,6 +20,7 @@ export default function PostCard({ post }: PostCardProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
+  const [showShare, setShowShare] = useState(false);
 
   const { author } = post;
   const authorTo = `/users/${author.username}`;
@@ -71,6 +74,7 @@ export default function PostCard({ post }: PostCardProps) {
           likesCount={post.likesCount}
           commentsCount={post.commentsCount}
           onComment={openDetail}
+          onShare={() => setShowShare(true)}
         />
       </div>
 
@@ -88,6 +92,8 @@ export default function PostCard({ post }: PostCardProps) {
           {formatRelativeTime(post.createdAt)}
         </div>
       </div>
+
+      <SharePostModal post={post} open={showShare} onClose={() => setShowShare(false)} />
     </article>
   );
 }

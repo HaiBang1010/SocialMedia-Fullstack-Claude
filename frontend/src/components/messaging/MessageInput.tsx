@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ImagePlus, Loader2, Mic, Send, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, Mic, Send, Smile, Trash2 } from "lucide-react";
 import { useSendMessage } from "@/features/messaging/hooks/useSendMessage";
 import { useTypingEmit } from "@/features/messaging/hooks/useTypingEmit";
 import { useVoiceRecorder } from "@/features/messaging/hooks/useVoiceRecorder";
 import {
   prepareAttachment,
+  prepareGiphyAttachment,
   prepareVoiceAttachment,
   setPendingAttachments,
   validateAttachment,
 } from "@/features/messaging/mediaUpload";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import UnifiedMediaPicker from "./UnifiedMediaPicker";
 import { ACCEPT_ATTR } from "@/lib/image";
 import { formatDuration } from "@/lib/audio";
 import { isVideoFile } from "@/lib/video";
+import type { GiphyItem } from "@/types/api";
 
 interface MessageInputProps {
   conversationId: string;
@@ -33,6 +37,7 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
   const [selected, setSelected] = useState<Selected[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { mutate, isPending } = useSendMessage(conversationId);
@@ -145,6 +150,42 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
     void recorder.start();
   };
 
+  // Splice text at the textarea caret (read the live DOM value so rapid inserts don't go stale).
+  const insertAtCursor = (text: string) => {
+    const el = taRef.current;
+    if (!el) {
+      setValue((v) => v + text);
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    setValue(el.value.slice(0, start) + text + el.value.slice(end));
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + text.length;
+      el.setSelectionRange(pos, pos);
+      resize();
+    });
+  };
+
+  // Emoji pick: has-text → insert into the draft (keep picking); empty → send a standalone EMOJI
+  // (the server renders it giant). Sticker/GIF pick: always send standalone immediately (E1).
+  const onEmojiPick = (native: string) => {
+    if (value.trim().length > 0) {
+      insertAtCursor(native);
+      return;
+    }
+    mutate({ tempId: `temp-${crypto.randomUUID()}`, content: native });
+    setPickerOpen(false);
+  };
+
+  const onGiphyPick = (item: GiphyItem, type: "STICKER" | "GIF") => {
+    const tempId = `temp-${crypto.randomUUID()}`;
+    setPendingAttachments(tempId, [prepareGiphyAttachment(item, type)]);
+    mutate({ tempId });
+    setPickerOpen(false);
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -247,6 +288,23 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
           >
             <Mic className="size-5" />
           </button>
+
+          {/* Emoji / sticker / GIF picker. Stays enabled with text present (emoji inserts into the
+              draft); sticker/GIF picks send standalone. */}
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="Emoji, stickers and GIFs"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
+              >
+                <Smile className="size-5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="start" className="w-auto p-2">
+              <UnifiedMediaPicker onEmoji={onEmojiPick} onGiphy={onGiphyPick} />
+            </PopoverContent>
+          </Popover>
 
           <textarea
             ref={taRef}

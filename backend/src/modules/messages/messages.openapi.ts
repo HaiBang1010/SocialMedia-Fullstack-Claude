@@ -18,6 +18,7 @@ const unauthorized401 = { description: 'Unauthorized', ...json(errorResponseSche
 const forbidden403 = { description: 'Forbidden — not a participant', ...json(errorResponseSchema) };
 const notFound404 = { description: 'Conversation not found', ...json(errorResponseSchema) };
 const messageNotFound404 = { description: 'Message not found', ...json(errorResponseSchema) };
+const gone410 = { description: 'Recall window elapsed (15 minutes)', ...json(errorResponseSchema) };
 
 // Registered before the conversations module so the Conversation schema $refs Message
 // (same schema object reference) instead of inlining it.
@@ -87,6 +88,24 @@ export function registerMessagesOpenApi(registry: OpenAPIRegistry) {
       401: unauthorized401,
       403: forbidden403,
       404: messageNotFound404,
+    },
+  });
+
+  // Phase 5.5 — recall (soft-delete). Sender only, within 15 minutes; returns the tombstone
+  // message and broadcasts message:deleted to every participant's user room.
+  registry.registerPath({
+    method: 'delete',
+    path: '/messages/{id}',
+    tags: ['Messages'],
+    summary: 'Recall (soft-delete) your own message within 15 minutes',
+    security: [{ bearerAuth: [] }],
+    request: { params: idParam },
+    responses: {
+      200: { description: 'Recalled (tombstone) message', ...json(Message) },
+      401: unauthorized401,
+      403: forbidden403,
+      404: messageNotFound404,
+      410: gone410,
     },
   });
 }

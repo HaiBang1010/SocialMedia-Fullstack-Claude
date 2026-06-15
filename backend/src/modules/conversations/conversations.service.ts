@@ -93,8 +93,20 @@ export async function findOrCreateDirectConversation(meId: string, targetUserId:
 }
 
 /**
+ * Build a default group name from member display names (Phase 5.5, Q2): "Group with A, B, C"
+ * for up to three, "+ and N others" beyond that.
+ */
+function deriveGroupName(names: string[]): string {
+  const shown = names.slice(0, 3);
+  const rest = names.length - shown.length;
+  const base = `Group with ${shown.join(', ')}`;
+  return rest > 0 ? `${base} and ${rest} other${rest > 1 ? 's' : ''}` : base;
+}
+
+/**
  * Create a GROUP conversation. participantIds are the OTHER members; the creator is added
- * as admin. Dedupes ids, drops the creator if present, and requires ≥1 other valid member.
+ * as admin. Dedupes ids, drops the creator if present, and requires ≥2 other valid members.
+ * name is optional — when blank, auto-derived from the members' display names (Q2).
  */
 export async function createGroupConversation(creatorId: string, input: CreateGroupInput) {
   const otherIds = [...new Set(input.participantIds)].filter((id) => id !== creatorId);
@@ -104,16 +116,19 @@ export async function createGroupConversation(creatorId: string, input: CreateGr
 
   const found = await prisma.user.findMany({
     where: { id: { in: otherIds } },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (found.length !== otherIds.length) {
     throw new AppError(400, 'InvalidParticipants', 'One or more participants do not exist');
   }
 
+  // Auto-derive a friendly name when the creator didn't provide one (single source of truth, E1).
+  const name = input.name?.trim() || deriveGroupName(found.map((u) => u.name));
+
   const convo = await prisma.conversation.create({
     data: {
       type: 'GROUP',
-      name: input.name,
+      name,
       participants: {
         create: [
           { userId: creatorId, isAdmin: true },

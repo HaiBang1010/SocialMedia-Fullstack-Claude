@@ -318,7 +318,7 @@ model MessageMedia {              // Phase 5.4a (Rich — mirrors PostMedia/Stor
   type               MediaType // IMAGE | VIDEO (mix allowed within one message)
   order              Int      @default(0) // 0-indexed carousel order
   url                String
-  objectKey          String   // S3 cleanup key (recall, Phase 5.5)
+  objectKey          String?  // S3 cleanup key (recall 5.5); null cho STICKER/GIF Giphy-hosted (5.4c)
   thumbnailUrl       String?  // image thumbnail / video poster (frontend-generated)
   thumbnailObjectKey String?  // S3 cleanup key for the thumbnail
   width              Int?     // original dims → grid aspect / no CLS
@@ -408,6 +408,7 @@ GET    /auth/me                       # auth required
 POST   /auth/logout
 
 # Users (Phase 1 — DONE)
+GET    /users/groupable               # 5.5 — addable to a new group (recent partners + mutual follows); ?q=&limit=
 GET    /users/:username
 PATCH  /users/me                      # auth required
 
@@ -449,7 +450,7 @@ GET    /conversations                 # 5.1 — list, lastMessageAt desc, cursor
 GET    /conversations/:id             # 5.1 — one (participant only → 404 else)
 GET    /conversations/:id/messages    # 5.1 — newest-first, cursor (participant → 404 else)
 POST   /conversations/:id/messages    # 5.1 — send TEXT (participant → 403 else)
-DELETE /messages/:id                  # defer 5.5 — thu hồi (soft delete deletedAt)
+DELETE /messages/:id                  # 5.5 — recall (soft delete deletedAt; sender only → 403, >15min → 410) → tombstone message
 POST   /messages/:id/reactions        # 5.3a — set/replace reaction (whitelist 7 emoji) → full message
 DELETE /messages/:id/reactions        # 5.3a — remove own reaction (idempotent) → full message
 # 5.4c — emoji (jumbomoji)/sticker/GIF/post-share all go through POST /conversations/:id/messages:
@@ -491,6 +492,7 @@ GET    /calls/turn-credentials
 // Server → Client
 'message:new'            { conversationId, message }            // → each participant's user room
 'message:reaction'       { conversationId, messageId, userId, emoji }   // 5.3a — delta (emoji null = removed); → each participant's user room
+'message:deleted'        { conversationId, messageId, deletedAt }       // 5.5 — recall delta; → each participant's user room (client patches to tombstone)
 'typing:user'            { conversationId, userId, username, typing }   // → convo room, excl. typer
 'read-receipt:update'    { conversationId, userId, lastReadMessageId }  // → convo room, excl. reader
 'presence:snapshot'      { online: userId[] }       // → the connecting socket (its online partners)
@@ -498,7 +500,6 @@ GET    /calls/turn-credentials
 'presence:offline'       { userId, lastSeenAt }     // → partner user rooms (5s offline debounce)
 
 // ── Deferred ──
-'message:deleted'        { messageId }              // recall — Phase 5.5
 'notification:new'       { notification }           // Phase 7
 
 // ── Calls — Phase 6 (signaling) ──
@@ -538,10 +539,12 @@ GET    /calls/turn-credentials
 - KIỂM TRA block list (model `Block` thêm sau).
 - Conversation đầu tiên với người chưa follow → đánh dấu "request" client-side.
 
-### Recall message
-- Soft delete: `deletedAt = NOW()`, KHÔNG xóa hàng.
-- Server emit `message:deleted` qua socket.
-- Client thay nội dung thành "Tin nhắn đã được thu hồi".
+### Recall message (Phase 5.5 — DONE)
+- Soft delete: `deletedAt = NOW()`, KHÔNG xóa hàng. **Sender only** (→ 403), **≤15 phút** (→ 410). Reactions cleared.
+- `serializeMessage` trả **tombstone** khi `deletedAt` set (content/media/reactions/sharedPost rỗng) ⇒ nội dung đã recall không bao giờ tới client. `listMessages` GIỮ tombstone (thread thấy placeholder, giữ vị trí); `conversationInclude.messages` lọc `deletedAt:null` ⇒ list preview nhảy về message trước (skip-to-previous).
+- Best-effort xóa S3 media (objectKey/thumbnailObjectKey) qua `lib/s3.deleteObject` — **soft-fail** (log + continue; orphan-sweep cron → BACKLOG).
+- Server emit `message:deleted { conversationId, messageId, deletedAt }` qua socket (user rooms).
+- Client render placeholder **"Message deleted"** (label hành động trong UI = "Delete"; HTTP verb / internal = recall).
 
 ### Video calls (WebRTC)
 - Backend chỉ làm **signaling** qua Socket.io — không stream media.
@@ -586,7 +589,7 @@ GET    /calls/turn-credentials
 | 5.1 Messaging Foundation | 9 | Conversation/Message models + REST (direct/group/list/get/messages) + responsive list+detail UI + optimistic send + polling 5s + burst grouping (KHÔNG Socket.io / media) | ✅ Done |
 | 5.2 Messaging Realtime | 10 | Socket.io infra (JWT handshake + user/convo rooms) + message:new broadcast (REST send unchanged) + typing + presence (online + last-seen, contact-scoped) + read receipts; polling removed | ✅ Done |
 | 5.3-5.4 Messaging | 11-12 | Reactions + GROUP read receipts (5.3) · media image/video + voice + emoji/sticker/GIF + post-share (5.4) | ✅ Done |
-| 5.5 Messaging | 12 | Recall (soft-delete) + reply-to + group management UI | ⏳ |
+| 5.5 Messaging | 12 | Recall (soft-delete tombstone, sender ≤15min, S3 soft-fail, socket message:deleted) + group create UI (GET /users/groupable recent+mutual merge); reply-to + group member management → BACKLOG | ✅ Done → **Phase 5 complete** |
 | 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |
 

@@ -12,10 +12,11 @@ export const createDirectSchema = z.object({
  * automatically as admin). A group needs ≥2 other members (so it's a real group, not a 1-1 in
  * disguise) — Phase 5.3c. The service dedupes + drops the creator, then re-checks ≥2 (catches
  * duplicates / the creator's own id slipping into the array, which the raw min(2) can't).
+ * name is OPTIONAL (Phase 5.5, Q2): when omitted/blank the service auto-derives "Group with …".
  */
 export const createGroupSchema = z.object({
   participantIds: z.array(z.string().min(1)).min(2),
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).optional(),
 });
 
 // ── Response shapes (cho OpenAPI doc) ──

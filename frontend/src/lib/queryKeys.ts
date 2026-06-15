@@ -20,6 +20,9 @@ export const queryKeys = {
   followers: (username: string) => ['users', username, 'followers'] as const,
   following: (username: string) => ['users', username, 'following'] as const,
 
+  // Users addable to a new group (GET /users/groupable), keyed by search query (Phase 5.5).
+  groupableUsers: (q: string) => ['users', 'groupable', q] as const,
+
   // Personalized feed (GET /feed).
   feed: () => ['feed'] as const,
 

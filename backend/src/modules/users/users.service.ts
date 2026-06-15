@@ -1,8 +1,8 @@
-import { PostVisibility } from '@prisma/client';
+import { Prisma, PostVisibility } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { isFollowing } from '../follows/follows.service';
-import type { UpdateProfileInput } from './users.schema';
+import type { UpdateProfileInput, GroupableQueryInput } from './users.schema';
 
 // Exported để các module khác (vd posts) reuse cho phần `author` —
 // đảm bảo KHÔNG bao giờ lộ email/passwordHash.
@@ -83,6 +83,75 @@ export async function getUserProfile(username: string, viewerId?: string) {
     isFollowing: !viewerId || isOwner ? null : viewerFollows,
     hasActiveStory,
   };
+}
+
+/** A public user row (the 7 publicUserSelect fields) — reused by the groupable list. */
+type GroupablePublicUser = Prisma.UserGetPayload<{ select: typeof publicUserSelect }>;
+
+/**
+ * Users the viewer can add to a new group (Phase 5.5, Q3). The pool = their recent conversation
+ * partners (convenience) + mutual followers (privacy — both sides opted in). Recent first (by
+ * conversation activity), then mutuals (alphabetical), deduped by id, self excluded. Optional
+ * `q` does a case-insensitive partial match on username/name WITHIN that pool. Returns a capped,
+ * non-paginated suggestion list.
+ */
+export async function getGroupableUsers(meId: string, { q, limit }: GroupableQueryInput) {
+  // Recent partners — every OTHER participant of my conversations, most-recent activity first.
+  const myParticipations = await prisma.participant.findMany({
+    where: { userId: meId },
+    orderBy: { conversation: { lastMessageAt: 'desc' } },
+    select: {
+      conversation: {
+        select: {
+          participants: {
+            where: { userId: { not: meId } },
+            select: { user: { select: publicUserSelect } },
+          },
+        },
+      },
+    },
+  });
+
+  // Mutual followers — I follow them AND they follow me (Follow self-join via two cheap lookups).
+  const [iFollow, followsMe] = await Promise.all([
+    prisma.follow.findMany({ where: { followerId: meId }, select: { followingId: true } }),
+    prisma.follow.findMany({ where: { followingId: meId }, select: { followerId: true } }),
+  ]);
+  const iFollowSet = new Set(iFollow.map((f) => f.followingId));
+  const mutualIds = followsMe.map((f) => f.followerId).filter((id) => iFollowSet.has(id));
+  const mutualUsers = mutualIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: mutualIds } },
+        select: publicUserSelect,
+        orderBy: { name: 'asc' },
+      })
+    : [];
+
+  // Merge: recent (in activity order) first, then mutuals not already seen. Dedupe by id.
+  const seen = new Set<string>();
+  const merged: (GroupablePublicUser & { source: 'recent' | 'mutual' })[] = [];
+  for (const p of myParticipations) {
+    for (const { user } of p.conversation.participants) {
+      if (seen.has(user.id)) continue;
+      seen.add(user.id);
+      merged.push({ ...user, source: 'recent' });
+    }
+  }
+  for (const user of mutualUsers) {
+    if (seen.has(user.id)) continue;
+    seen.add(user.id);
+    merged.push({ ...user, source: 'mutual' });
+  }
+
+  // Optional partial match within the pool (case-insensitive; username or display name).
+  const needle = q?.toLowerCase();
+  const filtered = needle
+    ? merged.filter(
+        (u) => u.username.toLowerCase().includes(needle) || u.name.toLowerCase().includes(needle),
+      )
+    : merged;
+
+  return filtered.slice(0, limit);
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput) {

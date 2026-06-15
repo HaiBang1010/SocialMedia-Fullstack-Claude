@@ -184,6 +184,36 @@ export function patchMessageMediaProgress(
   );
 }
 
+// Phase 5.5 — patch a message into a recalled TOMBSTONE: set deletedAt + clear content/media/
+// reactions/sharedPost (mirrors the server's serializeMessage tombstone). Funnels both the
+// optimistic recall and the message:deleted socket echo. Idempotent — guarded on `deletedAt`, so
+// applying it twice is a no-op (same reference). No-op if the message isn't in the thread cache.
+export function patchMessageDeleted(
+  qc: QueryClient,
+  conversationId: string,
+  messageId: string,
+  deletedAt: string,
+): void {
+  qc.setQueryData<InfiniteData<MessagesListResponse>>(
+    queryKeys.messages(conversationId),
+    (data) => {
+      if (!data) return data;
+      let touched = false;
+      const pages = data.pages.map((page) => {
+        let pageTouched = false;
+        const messages = page.messages.map((m) => {
+          if (m.id !== messageId || m.deletedAt) return m;
+          pageTouched = true;
+          touched = true;
+          return { ...m, deletedAt, content: null, media: [], reactions: [], sharedPost: null };
+        });
+        return pageTouched ? { ...page, messages } : page;
+      });
+      return touched ? { ...data, pages } : data;
+    },
+  );
+}
+
 // Phase 5.2 (T7) — flip the client-only `failed` flag on an optimistic (temp-id) message.
 // On send error we mark it failed (kept on screen for retry, NOT rolled back); on retry we
 // clear it (back to the pending/spinner state). No-op if the message isn't in cache.

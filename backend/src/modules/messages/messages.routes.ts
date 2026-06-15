@@ -38,4 +38,18 @@ router.delete(
   }),
 );
 
+/**
+ * DELETE /messages/:id — recall (soft-delete) your own message within 15 minutes (Phase 5.5).
+ * Sender only (403 else), 404 if missing, 410 once the window elapses. Returns the tombstone
+ * message. The more specific /:id/reactions routes are declared above, so this never shadows them.
+ */
+router.delete(
+  '/:id',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const message = await messagesService.recallMessage(req.params.id, req.user!.id);
+    res.json(message);
+  }),
+);
+
 export default router;

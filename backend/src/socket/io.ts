@@ -60,6 +60,21 @@ export function emitMessageReaction(
   }
 }
 
+/** Broadcast a recall (soft-delete) to each participant's user room (Phase 5.5). The payload is
+ * a delta — the client patches its cached message into a "Message deleted" tombstone. Reaches the
+ * sender's other tabs too (idempotent patch). */
+export function emitMessageDeleted(
+  conversationId: string,
+  messageId: string,
+  deletedAt: string,
+  participantIds: string[],
+): void {
+  if (!io) return;
+  for (const userId of participantIds) {
+    io.to(userRoom(userId)).emit('message:deleted', { conversationId, messageId, deletedAt });
+  }
+}
+
 /** Tell a user's conversation-partners that they just came online (D2: contact-scoped). */
 export function emitPresenceOnline(userId: string, partnerIds: string[]): void {
   if (!io) return;

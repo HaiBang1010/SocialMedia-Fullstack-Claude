@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader2, SmilePlus } from 'lucide-react';
+import { Loader2, SmilePlus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useLongPress } from '@/hooks/useLongPress';
@@ -12,6 +12,7 @@ import ReactionChips from './ReactionChips';
 import MessageMediaGrid from './MessageMediaGrid';
 import VoicePlayer from './VoicePlayer';
 import SharedPostCard from './SharedPostCard';
+import RecallMenu from './RecallMenu';
 import type { Message } from '@/types/api';
 
 interface MessageBubbleProps {
@@ -53,6 +54,24 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
     toggle(message.id, myEmoji, emoji);
     setPickerOpen(false);
   };
+
+  // Phase 5.5 — a recalled message is a tombstone: it keeps its slot (Q7) but shows only a
+  // "Message deleted" placeholder, no content/media/reactions/seen label/recall menu.
+  if (message.deletedAt) {
+    return (
+      <div className={cn('flex flex-col gap-0.5', isOwn ? 'items-end' : 'items-start')}>
+        <div
+          className={cn(
+            'flex items-center gap-1.5 rounded-2xl border border-dashed px-3 py-2 text-sm italic text-muted-foreground',
+            isOwn ? 'rounded-br-sm' : 'rounded-bl-sm',
+          )}
+        >
+          <Trash2 className="size-3.5 shrink-0" />
+          <span>Message deleted</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn('group flex flex-col gap-0.5', isOwn ? 'items-end' : 'items-start')}>
@@ -138,6 +157,10 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
               <SmilePlus className="size-4" />
             </button>
           )}
+
+          {/* Phase 5.5 — recall: own, persisted messages get a "…" menu (separate from the react
+              trigger so the two don't collide). Sender-only (Q5); window enforced inside the menu. */}
+          {canReact && isOwn && <RecallMenu message={message} />}
         </div>
 
         <PopoverContent side="top" align={isOwn ? 'end' : 'start'} className="w-auto p-1">

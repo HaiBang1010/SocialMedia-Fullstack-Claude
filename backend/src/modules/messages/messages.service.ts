@@ -4,7 +4,8 @@ import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
 import { getViewablePost } from '../posts/posts.service';
 import { isEmojiOnly } from '../../lib/emoji';
-import { emitNewMessage, emitMessageReaction } from '../../socket/io';
+import { deleteObject } from '../../lib/s3';
+import { emitNewMessage, emitMessageReaction, emitMessageDeleted } from '../../socket/io';
 import type { SendMessageInput } from './messages.schema';
 import type { PaginationInput } from '../posts/posts.schema';
 
@@ -33,44 +34,53 @@ export type MessageRow = Prisma.MessageGetPayload<{ include: typeof messageInclu
  * module can serialize the last-message preview from the same shape.
  */
 export function serializeMessage(message: MessageRow) {
+  // Phase 5.5 — a recalled (soft-deleted) message is a TOMBSTONE: content/media/reactions/
+  // sharedPost are cleared so the recalled payload never reaches a client. Only the position
+  // (id/sender/createdAt) + the deletedAt marker survive; the client renders "Message deleted".
+  // Reactions are also cleared in the DB on recall (Decision 5) — this is belt-and-suspenders.
+  const recalled = message.deletedAt != null;
   return {
     id: message.id,
     conversationId: message.conversationId,
     senderId: message.senderId,
     contentType: message.contentType,
-    content: message.content,
+    content: recalled ? null : message.content,
     createdAt: message.createdAt.toISOString(),
+    deletedAt: message.deletedAt ? message.deletedAt.toISOString() : null,
     sender: message.sender,
     // Phase 5.3a — RAW reaction rows (D2); the client aggregates into "👍 3  ❤️ 1".
-    reactions: message.reactions.map((r) => ({ userId: r.userId, emoji: r.emoji })),
+    reactions: recalled ? [] : message.reactions.map((r) => ({ userId: r.userId, emoji: r.emoji })),
     // Phase 5.4a — image/video attachments (ordered). WHITELIST: objectKey/thumbnailObjectKey
     // (S3 cleanup keys) are server-only and never serialized — mirrors serializeStory.
-    media: message.media.map((m) => ({
-      id: m.id,
-      type: m.type,
-      order: m.order,
-      url: m.url,
-      thumbnailUrl: m.thumbnailUrl,
-      width: m.width,
-      height: m.height,
-      duration: m.duration,
-    })),
+    media: recalled
+      ? []
+      : message.media.map((m) => ({
+          id: m.id,
+          type: m.type,
+          order: m.order,
+          url: m.url,
+          thumbnailUrl: m.thumbnailUrl,
+          width: m.width,
+          height: m.height,
+          duration: m.duration,
+        })),
     // Phase 5.4c — POST_SHARE preview card (narrow); null for non-share messages and for a
     // shared post that was since deleted (FK SetNull → "Post unavailable" on the client).
-    sharedPost: message.sharedPost
-      ? {
-          id: message.sharedPost.id,
-          caption: message.sharedPost.caption,
-          author: message.sharedPost.author,
-          firstMedia: message.sharedPost.media[0]
-            ? {
-                type: message.sharedPost.media[0].type,
-                url: message.sharedPost.media[0].url,
-                thumbnailUrl: message.sharedPost.media[0].thumbnailUrl,
-              }
-            : null,
-        }
-      : null,
+    sharedPost:
+      recalled || !message.sharedPost
+        ? null
+        : {
+            id: message.sharedPost.id,
+            caption: message.sharedPost.caption,
+            author: message.sharedPost.author,
+            firstMedia: message.sharedPost.media[0]
+              ? {
+                  type: message.sharedPost.media[0].type,
+                  url: message.sharedPost.media[0].url,
+                  thumbnailUrl: message.sharedPost.media[0].thumbnailUrl,
+                }
+              : null,
+          },
   };
 }
 
@@ -86,8 +96,9 @@ export async function isParticipant(conversationId: string, userId: string): Pro
 
 /**
  * List a conversation's messages, newest-first (cursor on id). READ: a non-participant
- * gets 404 (existence hidden — mirrors getViewablePost / prefer-404-over-403). Soft-deleted
- * messages (Phase 5.5 recall) are excluded.
+ * gets 404 (existence hidden — mirrors getViewablePost / prefer-404-over-403). Recalled
+ * messages (Phase 5.5) are KEPT in the list — serializeMessage returns them as a tombstone
+ * ("Message deleted") so they hold their position in the thread (Q7).
  */
 export async function listMessages(
   conversationId: string,
@@ -101,7 +112,7 @@ export async function listMessages(
   const { cursor, limit } = pagination;
 
   const rows = await prisma.message.findMany({
-    where: { conversationId, deletedAt: null },
+    where: { conversationId },
     include: messageInclude,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
@@ -319,5 +330,61 @@ export async function removeReaction(messageId: string, userId: string) {
 
   const serialized = serializeMessage(await getMessageWithReactions(messageId));
   emitMessageReaction(conversationId, messageId, { userId, emoji: null }, await getParticipantIds(conversationId));
+  return serialized;
+}
+
+/** How long after sending a message can still be recalled (Phase 5.5, Q6 — IG's 15-min window). */
+const RECALL_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Recall (soft-delete) a message — SENDER only (Q5), within 15 minutes (Q6). Sets deletedAt,
+ * clears reactions (Decision 5), best-effort deletes any UPLOADED S3 media (objectKey set;
+ * STICKER/GIF are Giphy-hosted and EMOJI/POST_SHARE/TEXT have no media → skip naturally). S3
+ * cleanup is SOFT-FAIL: a failure is logged, never blocks the recall (Decision 8; an orphan-sweep
+ * cron is BACKLOG). Broadcasts message:deleted to every participant's user room and returns the
+ * tombstone DTO.
+ *   404 — message doesn't exist · 403 — caller isn't the sender · 410 — past the 15-minute window
+ */
+export async function recallMessage(messageId: string, userId: string) {
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    include: messageInclude,
+  });
+  if (!message) throw new AppError(404, 'MessageNotFound', 'Message not found');
+
+  // Idempotent: an already-recalled message just returns its tombstone (no re-emit needed).
+  if (message.deletedAt) return serializeMessage(message);
+
+  if (message.senderId !== userId) {
+    throw new AppError(403, 'Forbidden', 'You can only recall your own messages');
+  }
+  if (Date.now() - message.createdAt.getTime() > RECALL_WINDOW_MS) {
+    throw new AppError(410, 'Gone', 'This message can no longer be recalled (15-minute window elapsed)');
+  }
+
+  // Clear reactions, then stamp deletedAt (Decision 5: a recalled message shows no reactions).
+  await prisma.messageReaction.deleteMany({ where: { messageId } });
+  const deletedAt = new Date();
+  await prisma.message.update({ where: { id: messageId }, data: { deletedAt } });
+
+  // Best-effort S3 cleanup for uploaded media only (objectKey set). Soft-fail (Decision 8).
+  for (const m of message.media) {
+    for (const key of [m.objectKey, m.thumbnailObjectKey].filter((k): k is string => !!k)) {
+      try {
+        await deleteObject(key);
+      } catch (err) {
+        console.error(`[recallMessage] Failed to delete S3 object ${key}:`, err);
+      }
+    }
+  }
+
+  // Serialize the tombstone from the in-memory row with deletedAt applied (avoids a re-fetch).
+  const serialized = serializeMessage({ ...message, deletedAt });
+  emitMessageDeleted(
+    message.conversationId,
+    messageId,
+    deletedAt.toISOString(),
+    await getParticipantIds(message.conversationId),
+  );
   return serialized;
 }

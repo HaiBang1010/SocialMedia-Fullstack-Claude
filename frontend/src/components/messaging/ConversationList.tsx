@@ -1,9 +1,10 @@
-import { useRef } from "react";
-import { MessagesSquare } from "lucide-react";
+import { useRef, useState } from "react";
+import { MessagesSquare, SquarePen } from "lucide-react";
 import EmptyState from "@/components/common/EmptyState";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useConversations } from "@/features/messaging/hooks/useConversations";
 import ConversationListItem from "./ConversationListItem";
+import GroupCreateModal from "./GroupCreateModal";
 
 interface ConversationListProps {
   activeId?: string;
@@ -11,6 +12,7 @@ interface ConversationListProps {
 
 export default function ConversationList({ activeId }: ConversationListProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
   const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useConversations();
 
@@ -23,9 +25,20 @@ export default function ConversationList({ activeId }: ConversationListProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b px-4 py-[17.5px]">
+      <header className="flex shrink-0 items-center justify-between border-b px-4 py-[17.5px]">
         <h1 className="font-heading text-xl font-semibold">Messages</h1>
+        <button
+          type="button"
+          aria-label="New group"
+          title="New group"
+          onClick={() => setGroupModalOpen(true)}
+          className="grid size-8 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+        >
+          <SquarePen className="size-5" />
+        </button>
       </header>
+
+      <GroupCreateModal open={groupModalOpen} onClose={() => setGroupModalOpen(false)} />
 
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (

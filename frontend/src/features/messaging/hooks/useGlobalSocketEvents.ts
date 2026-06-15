@@ -3,11 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSocketStore } from '@/stores/socketStore';
 import { usePresenceStore } from '@/stores/presenceStore';
 import { getSocket } from '@/lib/socket';
-import { insertIncomingMessage, patchMessageReactions } from '@/lib/messageCache';
+import { queryKeys } from '@/lib/queryKeys';
+import { insertIncomingMessage, patchMessageReactions, patchMessageDeleted } from '@/lib/messageCache';
 import { patchConversationOnNewMessage } from '@/lib/conversationCache';
 import type {
   MessageNewPayload,
   MessageReactionPayload,
+  MessageDeletedPayload,
   PresenceOfflinePayload,
   PresenceOnlinePayload,
   PresenceSnapshotPayload,
@@ -42,12 +44,19 @@ export function useGlobalSocketEvents() {
         return p.emoji === null ? filtered : [...filtered, { userId: p.userId, emoji: p.emoji }];
       });
     };
+    // Phase 5.5 — recall: patch the cached message into a tombstone (works whether or not the
+    // thread is open) + refetch the list so its preview skips the recalled message.
+    const onDeleted = (p: MessageDeletedPayload) => {
+      patchMessageDeleted(qc, p.conversationId, p.messageId, p.deletedAt);
+      qc.invalidateQueries({ queryKey: queryKeys.conversations() });
+    };
 
     socket.on('presence:snapshot', onSnapshot);
     socket.on('presence:online', onOnline);
     socket.on('presence:offline', onOffline);
     socket.on('message:new', onMessageNew);
     socket.on('message:reaction', onReaction);
+    socket.on('message:deleted', onDeleted);
 
     return () => {
       socket.off('presence:snapshot', onSnapshot);
@@ -55,6 +64,7 @@ export function useGlobalSocketEvents() {
       socket.off('presence:offline', onOffline);
       socket.off('message:new', onMessageNew);
       socket.off('message:reaction', onReaction);
+      socket.off('message:deleted', onDeleted);
     };
   }, [qc, status]);
 }

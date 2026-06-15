@@ -11,6 +11,13 @@
 
 (empty)
 
+## Phase 5.5 — Defer (đóng Phase 5; tách khỏi scope create+recall)
+
+- [ ] [backend+frontend/messaging] **Reply-to message** — `Message.replyToId` scalar đã có sẵn (5.1) nhưng CHƯA wire FK relation + UI quote-bubble + @-jump. Defer khỏi 5.5 (chỉ làm group create + recall).
+- [ ] [backend+frontend/messaging] **Group management** — add/remove/kick members, leave group, rename/đổi avatar group, admin transfer. 5.5 chỉ tạo group; quản lý sau (cần endpoints + Participant mutation + UI settings).
+- [ ] [backend/messages] **Orphan S3 cleanup cron** — recall xóa S3 best-effort (soft-fail); thêm sweep cron quét object mồ côi (khớp debt Posts/Stories "orphan check Phase polish"). Cũng gom: recall giữ lại `MessageMedia` rows (chỉ xóa S3) → hard-delete rows.
+- [ ] [frontend/messaging] **GroupCreateModal pagination** — hiện load toàn bộ recent+mutual không cursor (pool nhỏ chấp nhận). Cursor/virtualize khi user có nhiều follow.
+
 ## P2 — Sau (làm trong phase tiếp theo)
 
 - [ ] [backend/lib/jwt] Tách error types: TokenExpired vs WrongTokenType vs InvalidSignature. Hiện gộp chung message → khó debug khi user báo lỗi.

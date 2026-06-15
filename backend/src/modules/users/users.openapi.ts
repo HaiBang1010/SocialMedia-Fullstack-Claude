@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
-import { updateProfileSchema, userProfileSchema } from './users.schema';
+import { updateProfileSchema, userProfileSchema, groupableQuerySchema, groupableUserSchema } from './users.schema';
 import {
   errorResponseSchema,
   validationErrorResponseSchema,
@@ -42,6 +42,22 @@ export function registerUsersOpenApi(registry: OpenAPIRegistry) {
     responses: {
       200: { description: 'Updated user', ...json(userResponseSchema) },
       400: validationError400,
+      401: unauthorized401,
+    },
+  });
+
+  // GET /users/groupable — suggestion list for the group-create modal (Phase 5.5).
+  const GroupableUser = registry.register('GroupableUser', groupableUserSchema);
+
+  registry.registerPath({
+    method: 'get',
+    path: '/users/groupable',
+    tags: ['Users'],
+    summary: 'List users the viewer can add to a new group (recent partners + mutual followers)',
+    security: [{ bearerAuth: [] }],
+    request: { query: groupableQuerySchema },
+    responses: {
+      200: { description: 'Groupable users', ...json(z.array(GroupableUser)) },
       401: unauthorized401,
     },
   });

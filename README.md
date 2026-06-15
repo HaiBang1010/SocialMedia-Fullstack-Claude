@@ -33,7 +33,7 @@ social-media/
 ├── .claudeignore               ← file Claude Code không đọc
 ├── .gitignore
 │
-├── backend/                    ← Express API (Phase 1–5.4 backend ĐÃ XONG — + stories, messaging realtime, media/voice/sticker/GIF, giphy proxy)
+├── backend/                    ← Express API (Phase 1–5 backend ĐÃ XONG — + stories, messaging realtime, media/voice/sticker/GIF, giphy proxy, recall + group create)
 │   ├── CLAUDE.md
 │   ├── README.md               ← setup chi tiết từng bước
 │   ├── docker-compose.yml
@@ -48,7 +48,7 @@ social-media/
 │       ├── middleware/
 │       └── modules/
 │
-└── frontend/                   ← React app (Phase 1–5.4 FE xong — posts/carousel/video/comments + stories + messaging realtime + media/voice/sticker/GIF/emoji + post share)
+└── frontend/                   ← React app (Phase 1–5 FE xong — posts/carousel/video/comments + stories + messaging realtime + media/voice/sticker/GIF/emoji + post share + recall + group create)
     ├── CLAUDE.md
     └── README.md
 ```
@@ -69,7 +69,7 @@ npm run dev                 # → http://localhost:3000
                             # → http://localhost:3000/docs (Swagger UI)
 ```
 
-### Frontend (Phase 1–5.4 FE xong)
+### Frontend (Phase 1–5 FE xong)
 
 ```bash
 cd frontend
@@ -93,7 +93,7 @@ npm run dev                 # → http://localhost:5173
 | 3 | Posts nâng cao: carousel ≤5 ảnh (3.1) + video upload/playback + delete/visibility/private (3.2) + nested comments/replies + @mention (3.3) — sticker/gif defer | ✅ Xong |
 | 4 | Stories: 24h expire, viewer + gestures, text/emoji overlays, archive + cron, profile ring, view count/viewers | ✅ Xong |
 | 5.1–5.4 | Messaging: 1-1 + group, Socket.io realtime (typing/presence/read receipts), reactions, media (image/video) + voice, emoji/sticker/GIF (Giphy), post share | ✅ Xong |
-| 5.5 | Messaging: recall (soft-delete) + reply-to + group management UI | ⏳ |
+| 5.5 | Messaging: recall (soft-delete tombstone, 15-phút window) + group create UI (recent + mutual followers); reply-to + group member management → backlog | ✅ Xong |
 | 6 | Calls (audio, video, WebRTC) | ⏳ |
 | 7 | Polish (notifications, search, hide bài) | ⏳ |
 
@@ -125,9 +125,9 @@ Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PR
 
 > Mọi response trả post (single / list / feed) kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`. Chi tiết: `backend/CLAUDE.md` + Swagger `/docs`.
 
-**Stories / Messaging / Giphy** (Phase 4–5) — danh sách đầy đủ trong `backend/CLAUDE.md` + Swagger `/docs` (35 path keys):
+**Stories / Messaging / Giphy** (Phase 4–5) — danh sách đầy đủ trong `backend/CLAUDE.md` + Swagger `/docs` (37 path keys):
 - **Stories**: `POST/GET /stories`, `GET /stories/feed`, `POST /stories/:id/view`, `GET /stories/:id/views`, `GET /stories/archive`, `GET /users/:username/stories`, `DELETE /stories/:id`
-- **Conversations & Messages**: `POST /conversations/direct|/group`, `GET /conversations[/:id]`, `GET/POST /conversations/:id/messages`, `POST/DELETE /messages/:id/reactions`
+- **Conversations & Messages**: `POST /conversations/direct|/group`, `GET /conversations[/:id]`, `GET/POST /conversations/:id/messages`, `POST/DELETE /messages/:id/reactions`, `DELETE /messages/:id` (recall, 5.5), `GET /users/groupable` (group create, 5.5)
 - **Giphy proxy**: `GET /giphy/search`, `GET /giphy/trending` (sticker + GIF, key server-side)
 
 ## Quy ước project

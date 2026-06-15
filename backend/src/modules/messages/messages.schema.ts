@@ -171,6 +171,9 @@ export const messageResponseSchema = z.object({
   contentType: z.nativeEnum(MessageContentType),
   content: z.string().nullable(),
   createdAt: z.string(), // ISO
+  // Phase 5.5 — recall marker. Non-null = tombstone ("Message deleted"); content/media/reactions/
+  // sharedPost are then empty/null and the client renders a placeholder holding the bubble slot.
+  deletedAt: z.string().nullable(),
   sender: publicUserResponseSchema,
   reactions: z.array(messageReactionResponseSchema),
   media: z.array(messageMediaResponseSchema),

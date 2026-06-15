@@ -15,4 +15,11 @@ export const messagesApi = {
     const { data } = await apiClient.delete<Message>(`/messages/${messageId}/reactions`);
     return data;
   },
+
+  // DELETE /messages/:id → 200, the tombstone Message (recall, Phase 5.5). Sender only (403),
+  // 404 if missing, 410 once the 15-minute window has elapsed.
+  recallMessage: async (messageId: string): Promise<Message> => {
+    const { data } = await apiClient.delete<Message>(`/messages/${messageId}`);
+    return data;
+  },
 };

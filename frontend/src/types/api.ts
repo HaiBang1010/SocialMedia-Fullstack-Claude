@@ -20,6 +20,12 @@ export interface PublicUser {
   createdAt: string; // ISO
 }
 
+// GET /users/groupable (Phase 5.5) — a public user plus where the suggestion came from:
+// 'recent' = a recent conversation partner, 'mutual' = a mutual follow.
+export interface GroupableUser extends PublicUser {
+  source: 'recent' | 'mutual';
+}
+
 // Authenticated self. Adds `email`, present only on own-profile responses
 // (GET /auth/me, PATCH /users/me).
 export interface User extends PublicUser {
@@ -283,6 +289,9 @@ export interface Message {
   contentType: MessageContentType;
   content: string | null;
   createdAt: string; // ISO
+  // Phase 5.5 — recall marker. Non-null = tombstone: content is null, media/reactions/sharedPost
+  // empty, and the bubble renders "Message deleted" while holding its slot in the thread.
+  deletedAt?: string | null;
   sender: PublicUser;
   reactions: MessageReaction[]; // Phase 5.3a — RAW rows; aggregated client-side for display
   media: MessageMedia[]; // Phase 5.4a — image/video attachments (ordered; [] for text)
@@ -344,6 +353,14 @@ export interface MessageReactionPayload {
   messageId: string;
   userId: string;
   emoji: string | null;
+}
+
+// Phase 5.5 — a recall delta. The client patches its cached message into a "Message deleted"
+// tombstone (clears content/media/reactions/sharedPost, sets deletedAt).
+export interface MessageDeletedPayload {
+  conversationId: string;
+  messageId: string;
+  deletedAt: string; // ISO
 }
 
 export interface PresenceSnapshotPayload {
@@ -492,9 +509,10 @@ export interface CreateDirectInput {
 }
 
 // POST /conversations/group — participantIds excludes the creator (added server-side).
+// name is OPTIONAL (Phase 5.5): omit/blank → the server auto-derives "Group with X, Y, Z".
 export interface CreateGroupInput {
   participantIds: string[];
-  name: string;
+  name?: string;
 }
 
 // Cursor pagination query params, shared by all list endpoints.

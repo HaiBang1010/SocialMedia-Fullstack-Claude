@@ -73,7 +73,12 @@
       "Bash(rm -f tmp-smoke-group.mjs)",
       "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
       "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"name='\\\\''node.exe'\\\\''\" | Select-Object ProcessId, @{n='\\\\''Cmd'\\\\'';e={$_.CommandLine}} | Format-Table -AutoSize -Wrap')",
-      "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"name='\\\\''node.exe'\\\\''\" | Where-Object { $_.CommandLine -like '\\\\''*backend*'\\\\'' -or $_.CommandLine -like '\\\\''*server.ts*'\\\\'' } | Select-Object ProcessId, @{n='\\\\''Cmd'\\\\'';e={$_.CommandLine}} | Format-Table -AutoSize -Wrap')"
+      "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"name='\\\\''node.exe'\\\\''\" | Where-Object { $_.CommandLine -like '\\\\''*backend*'\\\\'' -or $_.CommandLine -like '\\\\''*server.ts*'\\\\'' } | Select-Object ProcessId, @{n='\\\\''Cmd'\\\\'';e={$_.CommandLine}} | Format-Table -AutoSize -Wrap')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"name='\\\\''node.exe'\\\\''\" | Where-Object { $_.CommandLine -like '\\\\''*backend*server.ts*'\\\\'' } | Select-Object ProcessId | Format-Table -AutoSize')",
+      "Bash(powershell.exe *)",
+      "Bash(node _smoke_54b.mjs)",
+      "Bash(echo \"---exit $?---\")",
+      "Bash(rm -f _smoke_54b.mjs)"
     ]
   }
 }

@@ -16,23 +16,25 @@ import {
   validateVideoFile,
 } from '@/lib/video';
 import { runPool } from '@/lib/uploadPool';
+import { VOICE_MIME } from '@/lib/audio';
 import type { MessageMediaInput, PresignRequest } from '@/types/api';
 
 export type UploadStatus = 'uploading' | 'done' | 'failed';
 
-// A picked file made ready to upload + preview. `uploaded` is set once both PUTs succeed, so a
-// retry can resume — re-uploading only the items that haven't finished yet.
+// A picked file made ready to upload + preview. `uploaded` is set once the PUT(s) succeed, so a
+// retry can resume — re-uploading only the items that haven't finished yet. Voice has no
+// thumbnail/dimensions (thumbnailBlob/width/height absent → single PUT).
 export interface PreparedAttachment {
   localId: string;
-  type: 'IMAGE' | 'VIDEO';
+  type: 'IMAGE' | 'VIDEO' | 'VOICE';
   file: File; // original, uploaded untouched
   fileContentType: PresignRequest['contentType'];
-  thumbnailBlob: Blob;
-  thumbnailContentType: PresignRequest['contentType'];
-  width: number;
-  height: number;
-  duration?: number; // seconds, video only
-  previewUrl: string; // object URL for the optimistic preview (image: original / video: poster)
+  thumbnailBlob?: Blob;
+  thumbnailContentType?: PresignRequest['contentType'];
+  width?: number;
+  height?: number;
+  duration?: number; // seconds, video + voice
+  previewUrl: string; // object URL for the optimistic preview (image: original / video: poster / voice: clip)
   uploaded?: MessageMediaInput;
 }
 
@@ -79,6 +81,19 @@ export async function prepareAttachment(file: File): Promise<PreparedAttachment>
   };
 }
 
+// Build a prepared VOICE attachment from a recorded clip (Phase 5.4b). No thumbnail/dimensions —
+// just the WebM blob + duration. previewUrl plays locally in the optimistic bubble (Q5).
+export function prepareVoiceAttachment(blob: Blob, duration: number): PreparedAttachment {
+  return {
+    localId: `att-${crypto.randomUUID()}`,
+    type: 'VOICE',
+    file: new File([blob], 'voice.webm', { type: VOICE_MIME }),
+    fileContentType: VOICE_MIME,
+    duration,
+    previewUrl: URL.createObjectURL(blob),
+  };
+}
+
 // Upload all attachments with at most 3 in flight (D3). Each item: presign+PUT original (0–90%)
 // then presign+PUT thumbnail (90–100%). `onItem` reports per-item progress/status (the send hook
 // patches it into the optimistic message). A failed item marks itself 'failed' and re-throws so
@@ -96,30 +111,39 @@ export async function uploadAttachments(
         return a.uploaded;
       }
       try {
+        const hasThumb = !!a.thumbnailBlob;
         const orig = await mediaApi.presign({ contentType: a.fileContentType, size: a.file.size });
         await uploadToPresignedUrl(orig.uploadUrl, a.file, (p) =>
-          onItem(order, Math.round(p * 0.9), 'uploading'),
+          onItem(order, Math.round(p * (hasThumb ? 0.9 : 1)), 'uploading'),
         );
 
-        const thumbFile = new File([a.thumbnailBlob], 'thumb', { type: a.thumbnailContentType });
-        const thumb = await mediaApi.presign({
-          contentType: a.thumbnailContentType,
-          size: thumbFile.size,
-        });
-        await uploadToPresignedUrl(thumb.uploadUrl, thumbFile, (p) =>
-          onItem(order, 90 + Math.round(p * 0.1), 'uploading'),
-        );
+        // Voice (no thumbnail) → single PUT. Image/video → second PUT for the thumbnail/poster.
+        let thumbUrl: string | undefined;
+        let thumbKey: string | undefined;
+        if (a.thumbnailBlob) {
+          const thumbFile = new File([a.thumbnailBlob], 'thumb', { type: a.thumbnailContentType });
+          const thumb = await mediaApi.presign({
+            contentType: a.thumbnailContentType!,
+            size: thumbFile.size,
+          });
+          await uploadToPresignedUrl(thumb.uploadUrl, thumbFile, (p) =>
+            onItem(order, 90 + Math.round(p * 0.1), 'uploading'),
+          );
+          thumbUrl = thumb.publicUrl;
+          thumbKey = thumb.objectKey;
+        }
 
         const input: MessageMediaInput = {
           type: a.type,
           order,
           url: orig.publicUrl,
           objectKey: orig.objectKey,
-          thumbnailUrl: thumb.publicUrl,
-          thumbnailObjectKey: thumb.objectKey,
-          width: a.width,
-          height: a.height,
-          ...(a.type === 'VIDEO' ? { duration: Math.round(a.duration ?? 0) } : {}),
+          ...(thumbUrl ? { thumbnailUrl: thumbUrl, thumbnailObjectKey: thumbKey } : {}),
+          ...(a.width != null ? { width: a.width } : {}),
+          ...(a.height != null ? { height: a.height } : {}),
+          ...(a.type === 'VIDEO' || a.type === 'VOICE'
+            ? { duration: Math.round(a.duration ?? 0) }
+            : {}),
         };
         a.uploaded = input;
         onItem(order, 100, 'done');

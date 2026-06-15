@@ -106,6 +106,13 @@
 - [P3] [frontend/messaging] Pinch-zoom ảnh trong MediaLightbox (mobile); hiện chỉ swipe + arrows.
 - [P3] [frontend/messaging] Thumbnail ceiling 512px — nếu single-image trông mềm trên màn lớn,
       nâng ceiling hoặc dùng `url` gốc cho single-image grid cell.
+
+[Phase 5.4b — voice messages, defer]:
+- [P2] [frontend/messaging] Safari/iOS voice: MediaRecorder KHÔNG hỗ trợ `audio/webm` (chỉ
+      `audio/mp4`) → hiện báo "not supported". Thêm `audio/mp4` (presign enum + `EXT_BY_MIME` +
+      recorder pick `isTypeSupported` ưu tiên webm fallback mp4) để Safari ghi âm được.
+- [P3] [frontend/messaging] Pause/resume recording + real waveform (decode audio buffer) +
+      trim/preview-before-send (hiện tap stop = auto-send ngay, KHÔNG nghe lại trước khi gửi).
 ## DONE
 
 - 2026-06-10 [frontend/story-viewer] Bar↔video desync khi reopen video (progress bar chạy

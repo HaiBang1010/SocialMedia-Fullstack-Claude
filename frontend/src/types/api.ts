@@ -72,7 +72,7 @@ export interface ProfileResponse {
 // ── Posts ──────────────────────────────────────────────────────────────
 
 export type PostVisibility = 'PUBLIC' | 'FOLLOWERS' | 'PRIVATE';
-export type MediaType = 'IMAGE' | 'VIDEO'; // Phase 2 only produces IMAGE
+export type MediaType = 'IMAGE' | 'VIDEO' | 'VOICE'; // Phase 2 IMAGE, 3.2 VIDEO, 5.4b VOICE
 
 // Item inside post.media (mirrors postMediaSchema).
 export interface PostMedia {
@@ -378,7 +378,8 @@ export interface PresignRequest {
     | 'image/webp'
     | 'image/gif'
     | 'image/avif'
-    | 'video/mp4';
+    | 'video/mp4'
+    | 'audio/webm';
   size: number;
 }
 
@@ -449,11 +450,11 @@ export interface MessageMediaInput {
   order: number;
   url: string;
   objectKey: string;
-  thumbnailUrl: string;
-  thumbnailObjectKey: string;
+  thumbnailUrl?: string; // required IMAGE/VIDEO, absent for VOICE (enforced server-side)
+  thumbnailObjectKey?: string;
   width?: number;
   height?: number;
-  duration?: number; // required for VIDEO (enforced server-side)
+  duration?: number; // required for VIDEO/VOICE (enforced server-side)
 }
 
 // POST /conversations/:id/messages (Phase 5.4a). A message carries an optional text caption

@@ -113,9 +113,11 @@ export async function sendMessage(
   const contentType: MessageContentType =
     media.length === 0
       ? MessageContentType.TEXT
-      : media.every((m) => m.type === 'VIDEO')
-        ? MessageContentType.VIDEO
-        : MessageContentType.IMAGE;
+      : media.every((m) => m.type === 'VOICE') // VOICE is single + exclusive (Phase 5.4b)
+        ? MessageContentType.VOICE
+        : media.every((m) => m.type === 'VIDEO')
+          ? MessageContentType.VIDEO
+          : MessageContentType.IMAGE;
 
   const message = await prisma.message.create({
     data: {
@@ -131,8 +133,8 @@ export async function sendMessage(
                 order: m.order,
                 url: m.url,
                 objectKey: m.objectKey,
-                thumbnailUrl: m.thumbnailUrl,
-                thumbnailObjectKey: m.thumbnailObjectKey,
+                thumbnailUrl: m.thumbnailUrl ?? null,
+                thumbnailObjectKey: m.thumbnailObjectKey ?? null,
                 width: m.width ?? null,
                 height: m.height ?? null,
                 duration: m.duration ?? null,

@@ -43,8 +43,10 @@ const messageMediaInputSchema = z.object({
   order: z.number().int().min(0),
   url: z.string().url(),
   objectKey: z.string().min(1),
-  thumbnailUrl: z.string().url(),
-  thumbnailObjectKey: z.string().min(1),
+  // thumbnail required for IMAGE/VIDEO, absent for VOICE (audio has no thumbnail) — enforced
+  // per-type in sendMessageSchema's superRefine below.
+  thumbnailUrl: z.string().url().optional(),
+  thumbnailObjectKey: z.string().min(1).optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
   duration: z.number().int().positive().optional(),
@@ -69,12 +71,27 @@ export const sendMessageSchema = z
         message: 'A message must have text content or at least one media item',
       });
     }
+    // VOICE is exclusive: a single voice clip, never combined with image/video or another voice.
+    if (media.some((m) => m.type === 'VOICE') && media.length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['media'],
+        message: 'A voice message cannot be combined with other media',
+      });
+    }
     media.forEach((m, i) => {
-      if (m.type === 'VIDEO' && m.duration == null) {
+      if ((m.type === 'VIDEO' || m.type === 'VOICE') && m.duration == null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['media', i, 'duration'],
-          message: 'duration is required for VIDEO media',
+          message: 'duration is required for VIDEO/VOICE media',
+        });
+      }
+      if ((m.type === 'IMAGE' || m.type === 'VIDEO') && (!m.thumbnailUrl || !m.thumbnailObjectKey)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['media', i, 'thumbnailUrl'],
+          message: 'thumbnailUrl and thumbnailObjectKey are required for image/video media',
         });
       }
     });

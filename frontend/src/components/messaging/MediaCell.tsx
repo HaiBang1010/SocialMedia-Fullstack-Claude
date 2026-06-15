@@ -1,18 +1,12 @@
 import { AlertCircle, Loader2, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDuration } from '@/lib/audio';
 import type { MessageMedia } from '@/types/api';
 
 interface MediaCellProps {
   media: MessageMedia;
   onOpen: () => void;
   className?: string;
-}
-
-// Format a video duration (seconds) as m:ss for the corner badge.
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 // One tile in a message's media grid (Phase 5.4a). Shows the thumbnail (image thumb / video

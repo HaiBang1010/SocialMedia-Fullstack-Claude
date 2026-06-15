@@ -1,10 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { ImagePlus, Loader2, Send, X } from 'lucide-react';
-import { useSendMessage } from '@/features/messaging/hooks/useSendMessage';
-import { useTypingEmit } from '@/features/messaging/hooks/useTypingEmit';
-import { prepareAttachment, setPendingAttachments, validateAttachment } from '@/features/messaging/mediaUpload';
-import { ACCEPT_ATTR } from '@/lib/image';
-import { isVideoFile } from '@/lib/video';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { ImagePlus, Loader2, Mic, Send, Trash2 } from "lucide-react";
+import { useSendMessage } from "@/features/messaging/hooks/useSendMessage";
+import { useTypingEmit } from "@/features/messaging/hooks/useTypingEmit";
+import { useVoiceRecorder } from "@/features/messaging/hooks/useVoiceRecorder";
+import {
+  prepareAttachment,
+  prepareVoiceAttachment,
+  setPendingAttachments,
+  validateAttachment,
+} from "@/features/messaging/mediaUpload";
+import { ACCEPT_ATTR } from "@/lib/image";
+import { formatDuration } from "@/lib/audio";
+import { isVideoFile } from "@/lib/video";
 
 interface MessageInputProps {
   conversationId: string;
@@ -22,7 +29,7 @@ interface Selected {
 }
 
 export default function MessageInput({ conversationId }: MessageInputProps) {
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState("");
   const [selected, setSelected] = useState<Selected[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -31,21 +38,39 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
   const { mutate, isPending } = useSendMessage(conversationId);
   const { start: startTyping, stop: stopTyping } = useTypingEmit(conversationId);
 
+  // Voice recording (Phase 5.4b). On stop, build a voice attachment + fire an optimistic send —
+  // reuses the 5.4a pending-stash + useSendMessage pipeline.
+  const recorder = useVoiceRecorder(({ blob, duration }) => {
+    const tempId = `temp-${crypto.randomUUID()}`;
+    setPendingAttachments(tempId, [prepareVoiceAttachment(blob, duration)]);
+    mutate({ tempId });
+  });
+  const recording = recorder.state === "recording" || recorder.state === "requesting";
+
+  useEffect(() => {
+    if (recorder.state === "denied") setError("Microphone access was denied.");
+    else if (recorder.state === "unsupported")
+      setError("Voice recording isn't supported in this browser.");
+  }, [recorder.state]);
+
   // Revoke any leftover preview URLs on unmount (latest set via a ref so the effect runs once).
   const selectedRef = useRef<Selected[]>([]);
   selectedRef.current = selected;
-  useEffect(() => () => selectedRef.current.forEach((s) => URL.revokeObjectURL(s.url)), []);
+  useEffect(
+    () => () => selectedRef.current.forEach((s) => URL.revokeObjectURL(s.url)),
+    [],
+  );
 
   const resize = () => {
     const el = taRef.current;
     if (!el) return;
-    el.style.height = 'auto';
+    el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
   };
 
   const onFilesPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
-    e.target.value = ''; // allow re-picking the same file
+    e.target.value = ""; // allow re-picking the same file
     if (picked.length === 0) return;
 
     setError(null);
@@ -91,10 +116,12 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
     if (selected.length > 0) {
       setPreparing(true);
       try {
-        const attachments = await Promise.all(selected.map((s) => prepareAttachment(s.file)));
+        const attachments = await Promise.all(
+          selected.map((s) => prepareAttachment(s.file)),
+        );
         setPendingAttachments(tempId, attachments);
       } catch {
-        setError('Could not prepare one of the attachments.');
+        setError("Could not prepare one of the attachments.");
         setPreparing(false);
         return;
       }
@@ -106,15 +133,20 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
     // Clear the composer (the optimistic bubble now owns the preview).
     selected.forEach((s) => URL.revokeObjectURL(s.url));
     setSelected([]);
-    setValue('');
+    setValue("");
     setError(null);
     requestAnimationFrame(() => {
-      if (taRef.current) taRef.current.style.height = 'auto';
+      if (taRef.current) taRef.current.style.height = "auto";
     });
   };
 
+  const startRecording = () => {
+    setError(null);
+    void recorder.start();
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void send();
     }
@@ -125,14 +157,18 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
     void send();
   };
 
-  const canSend = (!!value.trim() || selected.length > 0) && !isPending && !preparing;
+  const hasContent = !!value.trim() || selected.length > 0;
+  const canSend = hasContent && !isPending && !preparing;
 
   return (
     <form onSubmit={onSubmit} className="flex shrink-0 flex-col gap-2 border-t p-3">
-      {selected.length > 0 && (
+      {!recording && selected.length > 0 && (
         <div className="scrollbar-hide flex gap-2 overflow-x-auto">
           {selected.map((s) => (
-            <div key={s.id} className="relative size-16 shrink-0 overflow-hidden rounded-lg border bg-muted">
+            <div
+              key={s.id}
+              className="relative size-16 shrink-0 overflow-hidden rounded-lg border bg-muted"
+            >
               {s.isVideo ? (
                 <video src={s.url} muted className="size-full object-cover" />
               ) : (
@@ -144,7 +180,7 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
                 aria-label="Remove attachment"
                 className="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
               >
-                <X className="size-3" />
+                <Trash2 className="size-3" />
               </button>
             </div>
           ))}
@@ -153,50 +189,95 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
 
       {error && <p className="px-1 text-xs text-destructive">{error}</p>}
 
-      <div className="flex items-end gap-2">
-        <input
-          ref={fileRef}
-          type="file"
-          accept={`${ACCEPT_ATTR},video/mp4`}
-          multiple
-          hidden
-          onChange={onFilesPicked}
-        />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={isPending || preparing || selected.length >= MAX_MEDIA}
-          aria-label="Attach photos or videos"
-          className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
-        >
-          <ImagePlus className="size-5" />
-        </button>
+      {recording ? (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={recorder.cancel}
+            aria-label="Cancel recording"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
+          >
+            <Trash2 className="size-5" />
+          </button>
+          <div className="flex flex-1 items-center gap-2">
+            <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-red-500" />
+            <span className="text-sm tabular-nums">
+              {formatDuration(recorder.elapsed)}
+            </span>
+            <span className="truncate text-xs text-muted-foreground">
+              {recorder.state === "requesting" ? "Requesting microphone…" : "Recording…"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={recorder.stop}
+            disabled={recorder.state !== "recording"}
+            aria-label="Send voice message"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-50"
+          >
+            <Send className="size-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept={`${ACCEPT_ATTR},video/mp4`}
+            multiple
+            hidden
+            onChange={onFilesPicked}
+          />
+          {/* attach + mic are sibling ghost buttons on the left; send stays coral on the right. */}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={isPending || preparing || selected.length >= MAX_MEDIA}
+            aria-label="Attach photos or videos"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+          >
+            <ImagePlus className="size-5" />
+          </button>
+          <button
+            type="button"
+            onClick={startRecording}
+            disabled={isPending || preparing || selected.length > 0}
+            aria-label="Record voice message"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+          >
+            <Mic className="size-5" />
+          </button>
 
-        <textarea
-          ref={taRef}
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            resize();
-            startTyping();
-          }}
-          onKeyDown={onKeyDown}
-          onBlur={stopTyping}
-          rows={1}
-          placeholder="Message…"
-          aria-label="Message"
-          className="scrollbar-hide max-h-32 flex-1 resize-none rounded-2xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        />
+          <textarea
+            ref={taRef}
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              resize();
+              startTyping();
+            }}
+            onKeyDown={onKeyDown}
+            onBlur={stopTyping}
+            rows={1}
+            placeholder="Message…"
+            aria-label="Message"
+            className="scrollbar-hide max-h-32 flex-1 resize-none rounded-2xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
 
-        <button
-          type="submit"
-          disabled={!canSend}
-          aria-label="Send"
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-50"
-        >
-          {preparing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-        </button>
-      </div>
+          <button
+            type="submit"
+            disabled={!canSend}
+            aria-label="Send"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-50"
+          >
+            {preparing ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+          </button>
+        </div>
+      )}
     </form>
   );
 }

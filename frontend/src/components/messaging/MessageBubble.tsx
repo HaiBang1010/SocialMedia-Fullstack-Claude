@@ -10,6 +10,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import ReactionPicker from './ReactionPicker';
 import ReactionChips from './ReactionChips';
 import MessageMediaGrid from './MessageMediaGrid';
+import VoicePlayer from './VoicePlayer';
 import type { Message } from '@/types/api';
 
 interface MessageBubbleProps {
@@ -30,6 +31,7 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
 
   const mediaItems = message.media ?? [];
   const hasMedia = mediaItems.length > 0;
+  const isVoice = mediaItems.length === 1 && mediaItems[0]!.type === 'VOICE';
   const isFailed = message.failed === true;
   // Optimistic messages carry a temp- id until the server responds (a failed one is no longer
   // "pending" — it shows the retry affordance instead of a spinner).
@@ -56,11 +58,15 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
               {...(canReact ? longPress : {})}
               className={cn('flex flex-col gap-1', isOwn ? 'items-end' : 'items-start')}
             >
-              {hasMedia && (
+              {isVoice ? (
+                <div className={cn(isFailed && 'rounded-2xl ring-1 ring-destructive')}>
+                  <VoicePlayer media={mediaItems[0]!} isOwn={isOwn} />
+                </div>
+              ) : hasMedia ? (
                 <div className={cn('overflow-hidden rounded-2xl', isFailed && 'ring-1 ring-destructive')}>
                   <MessageMediaGrid media={mediaItems} onOpen={(i) => openLightbox(mediaItems, i)} />
                 </div>
-              )}
+              ) : null}
               {message.content && (
                 <div
                   className={cn(

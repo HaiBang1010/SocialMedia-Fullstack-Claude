@@ -81,6 +81,7 @@ model PostMedia {
 enum MediaType {
   IMAGE
   VIDEO
+  VOICE // Phase 5.4b — voice message audio (MessageMedia only; no thumbnail/dimensions)
 }
 
 model Follow {

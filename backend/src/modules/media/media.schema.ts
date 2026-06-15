@@ -5,8 +5,10 @@ import { z } from "zod";
 // in this phase, so the original is what gets stored).
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
+export const MAX_VOICE_BYTES = 5 * 1024 * 1024; // 5 MB — voice clip ≤ 5 min (Phase 5.4b)
 
 const VIDEO_CONTENT_TYPES = new Set<string>(["video/mp4"]);
+const AUDIO_CONTENT_TYPES = new Set<string>(["audio/webm"]);
 
 // Base object (no refinement) — registered with OpenAPI so the spec stays a clean
 // object schema. The size cap is a cross-field rule expressed in the refined
@@ -19,12 +21,13 @@ export const presignRequestBaseSchema = z.object({
     "image/gif",
     "image/avif",
     "video/mp4",
+    "audio/webm",
   ]),
   size: z
     .number()
     .int()
     .positive()
-    .describe("Bytes. Max 10MB for images, 50MB for video/mp4."),
+    .describe("Bytes. Max 10MB images, 50MB video/mp4, 5MB audio/webm."),
 });
 
 // Runtime validation schema: enforces the per-contentType size cap. The error is
@@ -32,7 +35,8 @@ export const presignRequestBaseSchema = z.object({
 export const presignRequestSchema = presignRequestBaseSchema.superRefine(
   (data, ctx) => {
     const isVideo = VIDEO_CONTENT_TYPES.has(data.contentType);
-    const cap = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    const isAudio = AUDIO_CONTENT_TYPES.has(data.contentType);
+    const cap = isVideo ? MAX_VIDEO_BYTES : isAudio ? MAX_VOICE_BYTES : MAX_IMAGE_BYTES;
     if (data.size > cap) {
       ctx.addIssue({
         code: z.ZodIssueCode.too_big,
@@ -42,7 +46,9 @@ export const presignRequestSchema = presignRequestBaseSchema.superRefine(
         path: ["size"],
         message: isVideo
           ? "File too large (max 50MB for video)"
-          : "File too large (max 10MB for images)",
+          : isAudio
+            ? "File too large (max 5MB for voice)"
+            : "File too large (max 10MB for images)",
       });
     }
   },

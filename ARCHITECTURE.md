@@ -194,7 +194,7 @@ model PostMedia {                 // Phase 2
   post         Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
-enum MediaType { IMAGE VIDEO }
+enum MediaType { IMAGE VIDEO VOICE } // VOICE = Phase 5.4b (MessageMedia audio only)
 
 model Comment {                   // Phase 2-3
   id          String   @id @default(cuid())

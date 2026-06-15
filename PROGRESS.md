@@ -6,6 +6,28 @@
 
 ---
 
+## 2026-06-15 — Checkpoint 5.4b: Voice Messages
+
+**Done (BE migration `add_voice_media_type` applied + `prisma generate` + `tsc` 0 lỗi + voice smoke 14/14 PASS trên server live + OpenAPI 33 paths giữ nguyên; FE `tsc -b` + `vite build` 0 lỗi). Browser-verify CHƯA chạy.** Tap mic → ghi âm (MediaRecorder WebM/Opus) → tap send để stop + auto-send → bubble voice player + 30 thanh sóng trang trí fill theo playback. Optimistic local playback. 5 decision FINAL: Q1 tap-to-toggle · Q2 MediaRecorder WebM/Opus (no dep) · Q3 HYBRID 30-bar deterministic · Q4 max 300s · Q5 optimistic reuse 5.4a.
+
+- **Backend (~5 file + 1 migration)**: `MediaType` enum **+VOICE** (migration `add_voice_media_type` — PG16 `ALTER TYPE ADD VALUE`, MessageMedia model KHÔNG đổi: thumbnail/width/height đã nullable). Presign (`media.schema`/`s3.ts`): **+`audio/webm`** + `MAX_VOICE_BYTES=5MB` + `EXT_BY_MIME webm`. `messageMediaInputSchema`: `thumbnailUrl`/`thumbnailObjectKey` → **optional**; superRefine: IMAGE/VIDEO **require** thumbnail (giữ contract 5.4a), VIDEO **+ VOICE** require duration, **VOICE exclusive** (≥1 VOICE → media.length===1). `sendMessage` derive contentType **+ nhánh VOICE** (`every VOICE → VOICE`). serialize/parity/include reuse 5.4a y nguyên (voice = 1 media row, thumbnail null).
+- **Frontend (~9 file)**: `types/api.ts` (`MediaType +VOICE`, `MessageMediaInput.thumbnailUrl?/thumbnailObjectKey?` optional, `PresignRequest +audio/webm`). `lib/audio.ts` NEW (`VOICE_MAX_DURATION=300`/`VOICE_MIME`/`formatDuration` [reuse MediaCell, gỡ inline trùng]/`generateWaveformBars` FNV+xorshift deterministic 30–90%). `useVoiceRecorder.ts` NEW (getUserMedia + MediaRecorder `audio/webm;codecs=opus`, duration = wall-clock timer, auto-stop 300s, state `idle|requesting|recording|denied|unsupported`, cleanup stop tracks). `mediaUpload.ts` extend (`PreparedAttachment.thumbnailBlob?/width?/height?` optional; `uploadAttachments` no-thumbnail → **1 PUT** + input bỏ thumbnail/w/h; `prepareVoiceAttachment`). `VoicePlayer.tsx` NEW (`<audio>` + play/pause + 30 bars fill `i/30<progress`, own=primary-foreground / other=primary). `MessageBubble` branch `isVoice` → VoicePlayer. `MessageInput` nút mic (morph send↔mic theo `hasContent`) + recording UI (Trash cancel + chấm đỏ pulse + timer + Send-stop). `messagePreview` `🎤 Voice (m:ss)`.
+
+**Lưu ý kỹ thuật:**
+- **Reuse 5.4a 100% cho send**: voice = `PreparedAttachment` no-thumbnail (1 PUT) → `setPendingAttachments` → `useSendMessage`; optimistic media (type VOICE, localUrl) + progress + retry-resume chạy y nguyên. VoiceRecorder.onComplete tự build att + mutate.
+- **Duration = wall-clock timer**: WebM của MediaRecorder không có duration metadata đáng tin (Infinity) ⇒ đo `Date.now()` start→stop, cap 300s.
+- **VOICE exclusive + derive**: contentType VOICE chỉ khi `every(VOICE)` (single, KHÔNG mix); thumbnailUrl/Url optional ở input + superRefine enforce per-type ⇒ IMAGE/VIDEO vẫn bắt buộc thumbnail (regression-safe).
+- **Bar contrast own bubble**: own message bg=primary ⇒ filled bar = `primary-foreground` (KHÔNG primary-on-primary vô hình); other = `primary`.
+- **MediaType enum migration** (KHÁC StoryItemType): MediaType khai từ Phase 2 chỉ IMAGE/VIDEO ⇒ phải `ALTER TYPE ADD VALUE 'VOICE'` (PG16 OK, không vướng transaction).
+
+**Tech debt phát sinh (đề xuất BACKLOG):**
+1. [frontend/messaging] Safari/iOS: MediaRecorder KHÔNG hỗ trợ `audio/webm` (chỉ `audio/mp4`) ⇒ 5.4b hiện error "not supported". Thêm `audio/mp4` (presign + recorder pick supported) cho Safari — Phase polish.
+2. [frontend/messaging] Pause/resume recording + waveform thật (decode audio) + trim-before-send: defer.
+
+**Next:** Browser-verify 5.4b (mic permission, record→send, local playback, bars fill, auto-stop, cancel, denied error, preview) — 2 incognito realtime. Rồi commit. Tiếp: 5.4c (sticker/GIF-picker + post-share) / 5.5 (recall + group UI).
+
+---
+
 ## 2026-06-13 — Checkpoint 5.4a: Media Messages (Image + Video)
 
 **Done (BE migration `add_message_media` applied + `prisma generate` + `tsc` 0 lỗi + media smoke 14/14 PASS trên server live + OpenAPI 33 paths giữ nguyên; FE `tsc -b` + `vite build` 0 lỗi 2086 modules [+9]). Browser-verify CHƯA chạy.** 1 message mang text caption AND/OR 1–10 media (ảnh + video **trộn được**); client resize thumbnail + upload gốc qua presign; grid IG-style trong bubble + lightbox fullscreen swipe; optimistic per-item progress + retry-resume. 4 decision FINAL: D1 IG-adaptive grid · D2 allow-mix (contentType marker) · D3 parallel pool-3 · D4 Rich model.

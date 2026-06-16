@@ -15,6 +15,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useComposerStore } from "@/stores/composerStore";
+import { useUnreadTotal } from "@/features/messaging/hooks/useUnreadTotal";
+import { useNotificationsUnreadCount } from "@/features/notifications/hooks/useNotifications";
 import ThemeToggle from "@/components/ThemeToggle";
 
 interface NavEntry {
@@ -23,15 +25,17 @@ interface NavEntry {
   // `to` → real NavLink; `action` → button handler; neither → disabled (Phase 2+).
   to?: string;
   action?: "create";
+  // Phase 7 — which unread badge to show on this entry.
+  badge?: "messages" | "notifications";
 }
 
 const NAV: NavEntry[] = [
   { label: "Home", icon: Home, to: "/" },
-  { label: "Search", icon: Search },
+  { label: "Search", icon: Search, to: "/search" },
   { label: "Explore", icon: Compass },
   { label: "Reels", icon: Film },
-  { label: "Messages", icon: Send, to: "/messages" },
-  { label: "Notifications", icon: Heart },
+  { label: "Messages", icon: Send, to: "/messages", badge: "messages" },
+  { label: "Notifications", icon: Heart, to: "/notifications", badge: "notifications" },
   { label: "Create", icon: SquarePlus, action: "create" },
   { label: "Profile", icon: User, to: "/profile" },
 ];
@@ -47,11 +51,25 @@ function initials(name: string): string {
     .join("");
 }
 
+// Small count pill shown on the Messages / Notifications nav entries.
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 export default function Sidebar() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const openComposer = useComposerStore((s) => s.open);
+  const unreadMessages = useUnreadTotal().data ?? 0;
+  const unreadNotifications = useNotificationsUnreadCount().data ?? 0;
+  const badgeCount = (badge?: NavEntry["badge"]) =>
+    badge === "messages" ? unreadMessages : badge === "notifications" ? unreadNotifications : 0;
 
   const handleLogout = () => {
     logout();
@@ -67,7 +85,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="mt-8 flex flex-1 flex-col gap-1">
-        {NAV.map(({ label, icon: Icon, to, action }) => {
+        {NAV.map(({ label, icon: Icon, to, action, badge }) => {
           if (to) {
             return (
               <NavLink
@@ -82,6 +100,7 @@ export default function Sidebar() {
                   <>
                     <Icon strokeWidth={isActive ? 2.5 : 2} />
                     <span>{label}</span>
+                    <NavBadge count={badgeCount(badge)} />
                   </>
                 )}
               </NavLink>

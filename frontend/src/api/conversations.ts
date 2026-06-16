@@ -8,6 +8,7 @@ import type {
   MessagesListResponse,
   PaginationParams,
   SendMessageInput,
+  UnreadTotalResponse,
 } from '@/types/api';
 
 export const conversationsApi = {
@@ -26,6 +27,12 @@ export const conversationsApi = {
   // GET /conversations → cursor-paginated list, recent activity first.
   list: async (params?: PaginationParams): Promise<ConversationListResponse> => {
     const { data } = await apiClient.get<ConversationListResponse>('/conversations', { params });
+    return data;
+  },
+
+  // GET /conversations/unread-total → { total } (nav badge).
+  unreadTotal: async (): Promise<UnreadTotalResponse> => {
+    const { data } = await apiClient.get<UnreadTotalResponse>('/conversations/unread-total');
     return data;
   },
 

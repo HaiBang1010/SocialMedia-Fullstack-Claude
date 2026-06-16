@@ -332,6 +332,7 @@ export interface Conversation {
   participants: Participant[];
   lastMessage: Message | null;
   activeCall?: CallInfo | null; // Phase 6 — ongoing call (for the "Call in progress · Join" banner)
+  unreadCount: number; // Phase 7 — the viewer's unread message count (list badge)
 }
 
 // GET /conversations — recent activity first, cursor-paginated.
@@ -442,6 +443,51 @@ export interface PresenceOnlinePayload {
 export interface PresenceOfflinePayload {
   userId: string;
   lastSeenAt: string; // ISO
+}
+
+// ── Notifications (Phase 7) ────────────────────────────────────────────
+// Only 3 stored types — LIKE/COMMENT/FOLLOW. MESSAGE + CALL are covered by the unread badge +
+// existing sockets, never persisted as notifications. postId/commentId are deep-link targets.
+
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW';
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  actor: PublicUser;
+  postId: string | null; // LIKE/COMMENT target, null for FOLLOW
+  commentId: string | null; // COMMENT target, null otherwise
+  isRead: boolean;
+  createdAt: string; // ISO
+}
+
+// GET /notifications — newest-first, cursor-paginated.
+export interface NotificationListResponse {
+  notifications: Notification[];
+  nextCursor: string | null;
+}
+
+// GET /notifications/unread-count, GET /conversations/unread-total — bare counts.
+export interface CountResponse {
+  count: number;
+}
+export interface UnreadTotalResponse {
+  total: number;
+}
+
+// notification:new socket payload (server → recipient's user room).
+export interface NotificationNewPayload {
+  notification: Notification;
+}
+
+// ── Search (Phase 7) ───────────────────────────────────────────────────
+
+export type SearchType = 'posts' | 'users' | 'all';
+
+// GET /search — ranked posts + users (the unselected array is empty for type-scoped queries).
+export interface SearchResponse {
+  posts: Post[];
+  users: PublicUser[];
 }
 
 // ── Likes / Follows ────────────────────────────────────────────────────

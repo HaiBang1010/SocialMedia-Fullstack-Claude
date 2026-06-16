@@ -1,6 +1,8 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
+import { safeNotify } from '../notifications/notifications.service';
 import type { PaginationInput } from '../posts/posts.schema';
 
 /** Resolve a username to its id + privacy flag, or 404 if it does not exist. */
@@ -26,11 +28,20 @@ export async function followUser(followerId: string, targetUsername: string) {
     throw new AppError(400, 'CannotFollowSelf', 'You cannot follow yourself');
   }
 
-  await prisma.follow.upsert({
-    where: { followerId_followingId: { followerId, followingId } },
-    create: { followerId, followingId },
-    update: {},
-  });
+  // Phase 7: create+catch-P2002 (instead of upsert) detects the true 0→1 follow so a re-follow
+  // never re-notifies; the HTTP contract ({ following: true }) is unchanged either way.
+  let isNew = false;
+  try {
+    await prisma.follow.create({ data: { followerId, followingId } });
+    isNew = true;
+  } catch (err) {
+    if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+    // already following → idempotent success, no notification
+  }
+
+  if (isNew) {
+    await safeNotify(followingId, { type: 'FOLLOW', actorId: followerId });
+  }
 
   return { following: true };
 }

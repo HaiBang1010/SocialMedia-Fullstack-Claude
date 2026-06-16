@@ -50,7 +50,7 @@ type ConversationRow = Prisma.ConversationGetPayload<{ include: typeof conversat
  * Transform a Prisma conversation into the API DTO. WHITELIST — directKey (a server-only
  * dedup key) is never exposed. lastMessage = the newest non-deleted message, or null.
  */
-function serializeConversation(convo: ConversationRow) {
+function serializeConversation(convo: ConversationRow, unreadCount = 0) {
   return {
     id: convo.id,
     type: convo.type,
@@ -58,6 +58,9 @@ function serializeConversation(convo: ConversationRow) {
     avatarUrl: convo.avatarUrl,
     createdAt: convo.createdAt.toISOString(),
     lastMessageAt: convo.lastMessageAt.toISOString(),
+    // Phase 7 — the viewer's unread count (non-deleted, non-own messages newer than their read
+    // cursor). Computed per page in listConversations; 0 on create/get paths.
+    unreadCount,
     participants: convo.participants.map((p) => ({
       user: p.user,
       isAdmin: p.isAdmin,
@@ -167,6 +170,43 @@ export async function createGroupConversation(creatorId: string, input: CreateGr
 }
 
 /**
+ * Phase 7 — unread counts for a page of conversations, in ONE query. For each conversation the
+ * viewer is in, count non-deleted messages NOT sent by them that are newer than their read cursor
+ * (lastReadMessageId's createdAt). COALESCE('-infinity') handles the never-read case (null cursor
+ * → count all). COUNT(*)::int avoids a BigInt (which res.json can't serialize). Returns a Map
+ * keyed by conversation id; conversations with zero unread are simply absent (default to 0).
+ */
+async function unreadCountsFor(userId: string, conversationIds: string[]): Promise<Map<string, number>> {
+  if (conversationIds.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<{ conversationId: string; unread: number }[]>(Prisma.sql`
+    SELECT m."conversationId" AS "conversationId", COUNT(*)::int AS unread
+    FROM "Message" m
+    JOIN "Participant" p ON p."conversationId" = m."conversationId" AND p."userId" = ${userId}
+    LEFT JOIN "Message" lr ON lr."id" = p."lastReadMessageId"
+    WHERE m."conversationId" IN (${Prisma.join(conversationIds)})
+      AND m."deletedAt" IS NULL
+      AND m."senderId" <> ${userId}
+      AND m."createdAt" > COALESCE(lr."createdAt", '-infinity'::timestamp)
+    GROUP BY m."conversationId"
+  `);
+  return new Map(rows.map((r) => [r.conversationId, r.unread]));
+}
+
+/** Grand total unread across ALL the viewer's conversations (the nav badge). Single aggregate. */
+export async function getUnreadTotal(userId: string) {
+  const rows = await prisma.$queryRaw<{ total: number }[]>(Prisma.sql`
+    SELECT COUNT(*)::int AS total
+    FROM "Message" m
+    JOIN "Participant" p ON p."conversationId" = m."conversationId" AND p."userId" = ${userId}
+    LEFT JOIN "Message" lr ON lr."id" = p."lastReadMessageId"
+    WHERE m."deletedAt" IS NULL
+      AND m."senderId" <> ${userId}
+      AND m."createdAt" > COALESCE(lr."createdAt", '-infinity'::timestamp)
+  `);
+  return { total: rows[0]?.total ?? 0 };
+}
+
+/**
  * The viewer's conversations, most-recent activity first (lastMessageAt desc, id desc).
  * Cursor on id. Non-members simply never match the `some` filter.
  */
@@ -185,7 +225,12 @@ export async function listConversations(userId: string, pagination: PaginationIn
   const slice = hasMore ? rows.slice(0, limit) : rows;
   const nextCursor = hasMore ? slice[slice.length - 1]!.id : null;
 
-  return { conversations: slice.map(serializeConversation), nextCursor };
+  const unread = await unreadCountsFor(userId, slice.map((c) => c.id));
+
+  return {
+    conversations: slice.map((c) => serializeConversation(c, unread.get(c.id) ?? 0)),
+    nextCursor,
+  };
 }
 
 /**

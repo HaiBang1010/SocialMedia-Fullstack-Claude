@@ -18,6 +18,8 @@ import UserProfilePage from '@/pages/UserProfilePage';
 import PostDetailPage from '@/pages/PostDetailPage';
 import ArchivePage from '@/pages/ArchivePage';
 import MessagesPage from '@/pages/MessagesPage';
+import NotificationsPage from '@/pages/NotificationsPage';
+import SearchPage from '@/pages/SearchPage';
 import PostDetailModal from '@/components/post/PostDetailModal';
 
 // `/profile` is a stable alias for the current user's own profile URL. It lives
@@ -55,6 +57,8 @@ export default function App() {
             <Route path="/me/stories/archive" element={<ArchivePage />} />
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/messages/:id" element={<MessagesPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/search" element={<SearchPage />} />
             <Route path="/users/:username" element={<UserProfilePage />} />
             <Route path="/posts/:id" element={<PostDetailPage />} />
           </Route>

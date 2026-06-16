@@ -75,6 +75,14 @@ export function emitMessageDeleted(
   }
 }
 
+/** Push a new (or 1h-bumped) notification to the recipient's user room (Phase 7). Reaches all
+ *  their tabs; the client increments the badge + prepends to the list. `notification` is the
+ *  already-serialized DTO. No-op when io is unset. */
+export function emitNotification(recipientId: string, notification: unknown): void {
+  if (!io) return;
+  io.to(userRoom(recipientId)).emit('notification:new', { notification });
+}
+
 // ── Calls (Phase 6) — LiveKit handles all WebRTC signaling, so these are thin notifications.
 // All three follow the same user-room fan-out as emitNewMessage; no offer/answer/ice events.
 

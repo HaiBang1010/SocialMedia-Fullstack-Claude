@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma';
 import { hashPassword, verifyPassword } from '../../lib/password';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/jwt';
+import { generateAvatarUrl } from '../../lib/avatar';
 import { AppError } from '../../middleware/error';
 import type { RegisterInput, LoginInput } from './auth.schema';
 
@@ -36,6 +37,8 @@ export async function register(input: RegisterInput) {
       email: input.email,
       passwordHash,
       name: input.name,
+      // Phase 7 — deterministic DiceBear default avatar (no upload needed at signup).
+      avatarUrl: generateAvatarUrl(input.username),
     },
     select: publicUserSelect,
   });

@@ -6,6 +6,26 @@
 
 ---
 
+## 2026-06-16 — Phase 7: Notifications + Search + Default Avatar — ✅ COMPLETE (FINAL phase → project 7/7)
+
+**Done (BE `tsc` 0 lỗi; FE `tsc -b` + `vite build` 0 lỗi **2139 modules**; 2 migration applied; OpenAPI **41→47** path keys; service smoke + live HTTP smoke pass; backfill 67 user idempotent).** Phase cuối — in-app notifications + unread badges + Postgres full-text search + default avatar. Scope refined: **IN** = notifications (LIKE/COMMENT/FOLLOW) + browser Notification API + sound + unread badges + search + DiceBear avatar; **OUT (defer Phase polish)** = hide posts, block users, push qua Service Worker, notification settings, MENTION/STORY_VIEW notif.
+
+- **Notifications**: migration `add_notifications` (model `Notification` [`recipientId`/`actorId`/`type`/`postId?`/`commentId?`/`readAt?`] + enum `NotificationType{LIKE COMMENT FOLLOW}` [3 value, KHÔNG MESSAGE/CALL/MENTION/STORY_VIEW] + 2 back-relation `User.recipient`/`actor`; **`actor` FK thật** để render avatar+username, `postId`/`commentId` scalar trơ giữ shape forward-declared). Module `notifications/` (`createNotification` + **1h dedupe** [`updateMany` bump atomic, KHÔNG unique constraint vì key có time-window] + **self-skip** + `safeNotify` best-effort wrap + list/markRead/markAllRead/getUnreadCount). 4 endpoint. Trigger ở `likes`/`comments`/`follows` service: **`create`+catch-P2002** thay `upsert` (detect 0→1 thật → re-like/re-follow KHÔNG re-notify; giữ HTTP contract) + `safeNotify`. Socket `emitNotification` → `notification:new` user room.
+- **Unread badges**: `GET /conversations` thêm `unreadCount` per item (per-page `$queryRaw`, `COUNT(*)::int` BigInt-safe, `COALESCE('-infinity')` null-cursor-safe) + `GET /conversations/unread-total` (single aggregate). FE: badge `ConversationListItem` + Sidebar/BottomNav Messages icon; realtime increment/reset qua `conversationCache` (**local decrement, race-free**) + `activeConversationStore` (mute chat đang mở).
+- **Search**: migration `add_search_vectors` (GENERATED tsvector `Post.caption` + `User.username||name` + GIN; schema khai `Unsupported("tsvector")?` chống drift; custom-SQL migration `--create-only` + hand-edit — raw SQL ĐẦU TIÊN repo). Module `search/` `GET /search?q=&type=&limit=&offset=` — **prefix `to_tsquery`** (`token:*` sanitize → injection-safe + search-as-you-type; KHÔNG `websearch_to_tsquery` vì chỉ match whole-lexeme [phát hiện lúc smoke]) + `ts_rank`; visibility filter posts (PUBLIC/own/FOLLOWERS-if-following in-SQL), users no privacy filter. FE `SearchPage` debounce 300ms + Users/Posts section.
+- **Default avatar**: `lib/avatar.ts generateAvatarUrl` = DiceBear **`9.x/toon-head`** (toon-head CHỈ có ở 9.x — 7.x 404, verify version trước khi apply). Set ở register + backfill script smart (null OR dicebear URL → re-point; custom upload preserve; idempotent). 67 user backfilled. FE Avatar KHÔNG đổi (đã render avatarUrl + initials fallback).
+- **Sound + browser notif**: `useNotificationSound` (one-shot, preload + autoplay-catch, asset `public/sounds/notification.mp3` optional) + `useBrowserNotifications` (gate `visibilityState!=='visible'` + lazy permission + click → focus+navigate). `message:new` → sound (trừ chat đang mở) + browser notif (title=sender.name, body=preview); `notification:new` → **KHÔNG sound** (badge + browser notif title="{actor} {action}"). OpenAPI 41→47 (+4 notif, +1 search, +1 unread-total), +2 tag (Notifications, Search).
+
+**Polish round 1 (4 fix sau browser test):**
+1. Avatar lorelei → **toon-head 9.x** (7.x toon-head 404; verify version) + smart backfill preserve custom upload.
+2. Sound CHỈ message (gỡ `playSound` khỏi `notification:new`).
+3. Browser notif title: social = "{actor} {action}" (vd "Alice liked your post"), message = sender.name + body preview.
+4. **Unread badge race (CRITICAL)**: `resetConversationUnread` invalidate total → refetch `/conversations/unread-total` đua với `message:read` write → sidebar total bounce +1 dù đang xem chat. Fix: **local decrement** (prev từ list cache, `total -= prev`; fallback invalidate khi convo không trong list) → race-free. (`incrementConversationUnread` đã skip cho active conv từ đầu — nên không có sound; bug thực ở total invalidate.)
+
+**Tech debt → BACKLOG**: MENTION + STORY_VIEW notif (defer), reply-to-comment-author notif, notification grouping ("X and N others"), post thumbnail trên LIKE/COMMENT row (hiện link-only), mobile Notifications nav entry (Sidebar/desktop-only), search ranking/pagination tuning (pg_trgm fuzzy), denormalized unread counter, notification settings + Service-Worker push.
+
+---
+
 ## 2026-06-16 — Phase 6: Audio/Video Calls (LiveKit Cloud) — ✅ COMPLETE (browser-verified + follow-up fixes)
 
 **Done (static verify: BE `tsc --noEmit` 0 lỗi; FE `tsc -b` + `vite build` 0 lỗi **2125 modules** (+24); migration `add_calls` applied; OpenAPI **37→41** path keys; LiveKit token mint OK (288-char JWT qua dynamic ESM import); server boot OK. **Live 2-user + LiveKit dashboard smoke: pending** + cần `public/sounds/ringtone.mp3`.)** Audio+Video calls 1-1 + group qua **LiveKit Cloud SFU**. 10 decision FINAL — keystone **Call-as-Message** (reuse 5.4c sharedPost infra: pagination/preview/realtime/optimistic free).

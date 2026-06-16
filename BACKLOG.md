@@ -142,6 +142,33 @@
 - [P3] [calls] **Free-tier quota monitor** — LiveKit dashboard 5000 participant-min/mo + 100 concurrent;
       thêm cảnh báo/graceful error khi gần limit trước khi production.
 
+## Phase 7 — Notifications / Search / Avatar (defer)
+
+- [ ] [backend+frontend/notifications] **MENTION notifications** — deferred (D4). Needs a backend
+      @-mention parser (FE has `parseMentions.tsx`; port the regex to `createComment`/post caption)
+      + a 4th NotificationType. Flood-risk + parser cost kept it out of Phase 7.
+- [ ] [backend/notifications] **STORY_VIEW notifications** — deferred (D6). Ephemeral + high-volume
+      (N viewers per story) → would flood; revisit with grouping ("X and 5 others viewed").
+- [ ] [backend/notifications] **Reply notifies post-author only**, not the parent-comment author.
+      The 3 stored types model post-author notifications cleanly; a "reply to your comment" notif
+      needs a dedicated type/ref. Add when comment threads get more first-class.
+- [ ] [frontend/notifications] **Notification grouping** ("X and 5 others liked your post") — Phase 7
+      stores one row per (actor,type,ref) with 1h dedupe; no aggregation across actors yet.
+- [ ] [frontend/notifications] **Post thumbnail on LIKE/COMMENT rows** — currently link-only (deep-
+      links to `/posts/:id`). Embedding a thumbnail needs a post relation on Notification (kept
+      scalar per D3) or a batch fetch. Nice-to-have.
+- [ ] [frontend/nav] **Mobile Notifications entry** — BottomNav (5 items) has no Notifications tab;
+      it's Sidebar (desktop) only. Add a top-bar bell or a 6th mobile entry so mobile users reach
+      `/notifications` without typing the URL.
+- [ ] [frontend/notifications] **Notification settings** (mute, sound off, per-type toggles) +
+      Service-Worker push (background) — deferred from Phase 7 scope (Phase polish).
+- [ ] [backend/search] **Search ranking/pagination tuning** — `limit`+`offset` (rank breaks cursor),
+      capped at 20/200. Prefix `to_tsquery` (`token:*`) matches lexeme prefixes only, not arbitrary
+      substrings; consider `pg_trgm` for true fuzzy/substring + typo tolerance if needed.
+- [ ] [backend/messages] **Denormalized unread counter** — per-conversation unread is a per-page
+      `$queryRaw`; `unread-total` scans all the viewer's messages. Fine at Beng scale; if it gets hot,
+      add a maintained counter (increment on send, reset on read) instead of computing each time.
+
 ## DONE
 
 - 2026-06-10 [frontend/story-viewer] Bar↔video desync khi reopen video (progress bar chạy

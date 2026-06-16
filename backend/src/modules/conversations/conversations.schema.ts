@@ -37,6 +37,12 @@ export const conversationResponseSchema = z.object({
   lastMessage: messageResponseSchema.nullable(),
   // Phase 6 — ongoing call in this conversation (for the "Call in progress · Join" banner), or null.
   activeCall: callResponseSchema.nullable(),
+  // Phase 7 — the viewer's unread message count (badge). Populated by GET /conversations; 0 elsewhere.
+  unreadCount: z.number().int().nonnegative(),
+});
+
+export const unreadTotalResponseSchema = z.object({
+  total: z.number().int().nonnegative(),
 });
 
 export const conversationListResponseSchema = z.object({

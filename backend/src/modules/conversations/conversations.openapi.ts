@@ -5,6 +5,7 @@ import {
   createGroupSchema,
   conversationResponseSchema,
   conversationListResponseSchema,
+  unreadTotalResponseSchema,
 } from './conversations.schema';
 import { paginationSchema } from '../posts/posts.schema';
 import { errorResponseSchema, validationErrorResponseSchema } from '../../lib/openapi';
@@ -22,6 +23,7 @@ export function registerConversationsOpenApi(registry: OpenAPIRegistry) {
   const ConversationList = registry.register('ConversationList', conversationListResponseSchema);
   const CreateDirectReq = registry.register('CreateDirectConversationRequest', createDirectSchema);
   const CreateGroupReq = registry.register('CreateGroupConversationRequest', createGroupSchema);
+  const UnreadTotal = registry.register('ConversationUnreadTotal', unreadTotalResponseSchema);
   const idParam = z.object({ id: z.string() });
 
   registry.registerPath({
@@ -64,6 +66,18 @@ export function registerConversationsOpenApi(registry: OpenAPIRegistry) {
     request: { query: paginationSchema },
     responses: {
       200: { description: 'Conversations', ...json(ConversationList) },
+      401: unauthorized401,
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/conversations/unread-total',
+    tags: ['Conversations'],
+    summary: 'Total unread messages across all the viewer\'s conversations (nav badge)',
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: { description: 'Unread total', ...json(UnreadTotal) },
       401: unauthorized401,
     },
   });

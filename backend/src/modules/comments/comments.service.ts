@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
 import { getViewablePost } from '../posts/posts.service';
+import { safeNotify } from '../notifications/notifications.service';
 import type {
   CreateCommentInput,
   UpdateCommentInput,
@@ -40,7 +41,7 @@ function serializeComment(comment: CommentRow) {
  * re-parented to the parent's root, so the DB chain never exceeds one level.
  */
 export async function createComment(authorId: string, postId: string, input: CreateCommentInput) {
-  await getViewablePost(postId, authorId);
+  const post = await getViewablePost(postId, authorId);
 
   let parentId: string | null = null;
   if (input.parentId) {
@@ -59,6 +60,17 @@ export async function createComment(authorId: string, postId: string, input: Cre
     data: { postId, authorId, parentId, content: input.content },
     include: commentInclude,
   });
+
+  // Notify the POST author (self-skip handled in createNotification). Replies notify the post
+  // author too — notifying the parent-comment author is out of scope of the 3 stored types
+  // (see BACKLOG); @mention notifications are deferred (Phase polish, no backend parser).
+  await safeNotify(post.authorId, {
+    type: 'COMMENT',
+    actorId: authorId,
+    postId,
+    commentId: comment.id,
+  });
+
   return serializeComment(comment);
 }
 

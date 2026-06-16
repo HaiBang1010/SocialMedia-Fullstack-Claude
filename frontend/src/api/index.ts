@@ -20,3 +20,5 @@ export { conversationsApi } from './conversations';
 export { messagesApi } from './messages';
 export { callsApi } from './calls';
 export { giphyApi, type GiphyType } from './giphy';
+export { notificationsApi } from './notifications';
+export { searchApi } from './search';

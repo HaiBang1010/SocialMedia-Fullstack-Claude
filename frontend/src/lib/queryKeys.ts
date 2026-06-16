@@ -55,4 +55,16 @@ export const queryKeys = {
 
   // A conversation's messages (GET /conversations/:id/messages).
   messages: (conversationId: string) => ['conversations', conversationId, 'messages'] as const,
+
+  // Total unread messages across all conversations (GET /conversations/unread-total) — nav badge.
+  conversationsUnreadTotal: () => ['conversations', 'unread-total'] as const,
+
+  // The viewer's notifications (GET /notifications).
+  notifications: () => ['notifications'] as const,
+
+  // Unread notification count (GET /notifications/unread-count) — nav badge.
+  notificationsUnreadCount: () => ['notifications', 'unread-count'] as const,
+
+  // Full-text search (GET /search), keyed by query + type (Phase 7).
+  search: (q: string, type: string) => ['search', type, q] as const,
 };

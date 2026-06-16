@@ -54,6 +54,19 @@ router.get(
 );
 
 /**
+ * GET /conversations/unread-total — grand total unread across the viewer's conversations (nav
+ * badge). Literal route declared before /:id so it is never captured as an id.
+ */
+router.get(
+  '/unread-total',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await conversationsService.getUnreadTotal(req.user!.id);
+    res.json(result);
+  }),
+);
+
+/**
  * GET /conversations/:id/messages — messages newest-first (participant only; 404 else).
  * Delegates to the messages module (the /conversations/:id/messages split mirrors how
  * GET/POST /posts/:id/comments live in posts.routes).

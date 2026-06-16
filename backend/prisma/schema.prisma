@@ -32,11 +32,16 @@ model User {
   conversations Participant[]
   messageReactions MessageReaction[]
   initiatedCalls Call[] @relation("initiatedCalls") // Phase 6 — calls this user started
+  notifications      Notification[] @relation("recipient") // Phase 7 — notifications I received
+  actedNotifications Notification[] @relation("actor")     // Phase 7 — notifications I triggered
   // Follow relation naming is intentionally "inverted" (matches ARCHITECTURE §3):
   // - followers: rows where I am the `following` target  -> people who follow ME
   // - following: rows where I am the `follower`          -> people I follow
   followers    Follow[] @relation("following")
   following    Follow[] @relation("follower")
+
+  // Phase 7 — full-text search over username + name (see Post.searchVector note; DDL hand-written).
+  searchVector Unsupported("tsvector")?
 
   @@index([username])
   @@index([email])
@@ -54,6 +59,12 @@ model Post {
   comments Comment[]
   likes    Like[]
   sharedInMessages Message[] @relation("SharedPost") // Phase 5.4c — messages that share this post
+
+  // Phase 7 — full-text search. GENERATED ALWAYS column (DDL hand-written in the
+  // add_search_vectors migration; Prisma can't author the GENERATED expression). Declared
+  // Unsupported only to silence drift detection; it is excluded from the typed client and never
+  // selected/serialized — search reads it via $queryRaw.
+  searchVector Unsupported("tsvector")?
 
   @@index([authorId, createdAt])
 }
@@ -352,4 +363,34 @@ enum CallEndReason {
   MISSED
   DECLINED
   FAILED
+}
+
+// Phase 7 — a notification row for the 3 stored social events (LIKE / COMMENT / FOLLOW).
+// MESSAGE + CALL are intentionally NOT persisted here — they are covered by the per-conversation
+// unread badge + existing realtime sockets (Decisions D1/D2). `actor` is a real FK relation (the
+// list always renders the actor's avatar + username); `postId`/`commentId` stay scalar-only
+// references (no FK) — the client builds the deep-link from them, mirroring Message.replyToId.
+// readAt null = unread (powers the badge count). Dedupe (same recipient+actor+type+ref within 1h)
+// happens at the service layer, NOT via a unique constraint (the key includes a time window).
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  actorId     String
+  type        NotificationType
+  postId      String? // scalar reference (LIKE/COMMENT) — no FK relation
+  commentId   String? // scalar reference (COMMENT)      — no FK relation
+  readAt      DateTime? // null = unread
+  createdAt   DateTime         @default(now())
+
+  recipient User @relation("recipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User @relation("actor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, createdAt(sort: Desc)]) // notification list (newest-first cursor)
+  @@index([recipientId, readAt]) // unread-count lookup
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
 }

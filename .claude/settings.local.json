@@ -80,7 +80,10 @@
       "Bash(echo \"---exit $?---\")",
       "Bash(rm -f _smoke_54b.mjs)",
       "Bash(npx prisma *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(curl -s -m 15 -o /dev/null -w \"HTTP %{http_code} | type=%{content_type} | bytes=%{size_download}\\\\n\" \"https://api.dicebear.com/7.x/toon-head/svg?seed=test\")",
+      "Bash(curl -s -m 15 -o /dev/null -w \"HTTP %{http_code} | type=%{content_type} | bytes=%{size_download}\\\\n\" \"https://api.dicebear.com/7.x/lorelei/svg?seed=test\")"
     ]
   }
 }

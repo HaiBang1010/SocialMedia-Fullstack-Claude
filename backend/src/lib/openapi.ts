@@ -77,6 +77,8 @@ function registerAll() {
   // Calls after messages so its CALL/Message-referencing responses $ref the Message component.
   const { registerCallsOpenApi } = require('../modules/calls/calls.openapi');
   const { registerGiphyOpenApi } = require('../modules/giphy/giphy.openapi');
+  const { registerNotificationsOpenApi } = require('../modules/notifications/notifications.openapi');
+  const { registerSearchOpenApi } = require('../modules/search/search.openapi');
   const { registerHealthOpenApi } = require('./health.openapi');
   registerAuthOpenApi(registry);
   registerUsersOpenApi(registry);
@@ -91,6 +93,8 @@ function registerAll() {
   registerConversationsOpenApi(registry);
   registerCallsOpenApi(registry);
   registerGiphyOpenApi(registry);
+  registerNotificationsOpenApi(registry);
+  registerSearchOpenApi(registry);
   registerHealthOpenApi(registry);
   registered = true;
 }
@@ -120,6 +124,8 @@ export function buildOpenApiDocument() {
       { name: 'Messages', description: 'Messages within a conversation' },
       { name: 'Calls', description: 'Audio + video calls over LiveKit' },
       { name: 'Giphy', description: 'Sticker + GIF search/trending proxy' },
+      { name: 'Notifications', description: 'Like / comment / follow notifications' },
+      { name: 'Search', description: 'Full-text post + user search' },
       { name: 'Meta' },
     ],
   });

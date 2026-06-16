@@ -4,7 +4,8 @@ import { getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/stores/authStore';
 import { useSocketStore } from '@/stores/socketStore';
 import { useTypingStore } from '@/stores/typingStore';
-import { patchReadReceipt } from '@/lib/conversationCache';
+import { useActiveConversationStore } from '@/stores/activeConversationStore';
+import { patchReadReceipt, resetConversationUnread } from '@/lib/conversationCache';
 import type { MessageNewPayload, ReadReceiptPayload, TypingUserPayload } from '@/types/api';
 
 const TYPING_TTL = 4000; // safety net: drop a typist if a typing:stop is ever lost
@@ -24,6 +25,10 @@ export function useConversationSocket(conversationId: string) {
 
     socket.emit('conversation:join', conversationId);
     socket.emit('message:read', { conversationId });
+    // Phase 7 — this is now the open chat: track it (mutes its unread badge + sound) and clear its
+    // unread on open.
+    useActiveConversationStore.getState().setActive(conversationId);
+    resetConversationUnread(qc, conversationId);
 
     const meId = useAuthStore.getState().user?.id;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -58,11 +63,13 @@ export function useConversationSocket(conversationId: string) {
       patchReadReceipt(qc, conversationId, p.userId, p.lastReadMessageId);
     };
 
-    // A message from the other person arrived while I'm viewing → mark read so they see "Seen".
+    // A message from the other person arrived while I'm viewing → mark read so they see "Seen"
+    // and keep my own unread badge cleared for this open chat.
     const onIncoming = (p: MessageNewPayload) => {
       if (p.conversationId !== conversationId) return;
       if (p.message.senderId === meId) return;
       socket.emit('message:read', { conversationId });
+      resetConversationUnread(qc, conversationId);
     };
 
     socket.on('typing:user', onTyping);
@@ -77,6 +84,10 @@ export function useConversationSocket(conversationId: string) {
       timers.forEach((t) => clearTimeout(t));
       timers.clear();
       useTypingStore.getState().clearConversation(conversationId);
+      // Only clear if we're still the active one (a fast switch may have already set the next id).
+      if (useActiveConversationStore.getState().id === conversationId) {
+        useActiveConversationStore.getState().setActive(null);
+      }
     };
   }, [conversationId, qc, status]);
 }

@@ -40,9 +40,21 @@ export default function ConversationListItem({ conversation, isActive }: Convers
             {formatRelativeTime(conversation.lastMessageAt)}
           </span>
         </div>
-        <p className="truncate text-sm text-muted-foreground">
-          {formatMessagePreview(conversation.lastMessage)}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p
+            className={cn(
+              'truncate text-sm text-muted-foreground',
+              conversation.unreadCount > 0 && 'font-semibold text-foreground',
+            )}
+          >
+            {formatMessagePreview(conversation.lastMessage)}
+          </p>
+          {conversation.unreadCount > 0 && (
+            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
+              {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+            </span>
+          )}
+        </div>
       </div>
     </NavLink>
   );

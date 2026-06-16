@@ -384,6 +384,12 @@ model Notification {              // Phase 7
 enum NotificationType { LIKE COMMENT FOLLOW MENTION MESSAGE STORY_VIEW }
 ```
 
+> **Phase 7 — `Notification` ACTUAL (khác bản plan ở trên):**
+> - Field đổi `userId` → **`recipientId`** + thêm **`actorId`** (cả 2 FK `User`, named relation `recipient`/`actor` — như `Follow.follower`/`following`). `actor` là FK THẬT (list luôn render avatar+username actor); `postId`/`commentId` GIỮ scalar trơ (no FK) — FE build deep-link, mirror `Message.replyToId`. `readAt?` null = unread. Index `[recipientId, createdAt desc]` (list) + `[recipientId, readAt]` (unread-count).
+> - **Enum chỉ 3 value `LIKE COMMENT FOLLOW`** (KHÔNG MENTION/MESSAGE/STORY_VIEW). **MESSAGE + CALL KHÔNG lưu Notification row** (cover bởi unread badge per-conversation + socket sẵn có — Decision D1/D2). MENTION + STORY_VIEW defer (parser cost + flood) → BACKLOG.
+> - **Dedupe 1h** ở service (`updateMany` bump createdAt + reset readAt; KHÔNG unique constraint vì key có time-window) + **self-skip** (recipient===actor → no-op) + `safeNotify` best-effort (notif fail KHÔNG vỡ like/comment/follow). Trigger: `likes`/`comments`/`follows` đổi `upsert` → **`create`+catch-P2002** (detect 0→1 → re-action KHÔNG re-notify). Migration `add_notifications`.
+> - **Search (Phase 7)**: `Post.searchVector` + `User.searchVector` = **GENERATED tsvector STORED + GIN** (Prisma khai `Unsupported("tsvector")?` chống drift, DDL hand-write trong migration `add_search_vectors`). `GET /search` prefix `to_tsquery` (`token:*`, sanitize injection-safe; KHÔNG `websearch_to_tsquery` vì chỉ whole-lexeme). **Default avatar**: `User.avatarUrl` set DiceBear `9.x/toon-head` ở register + backfill (KHÔNG migration — field có sẵn). OpenAPI 41→47.
+>
 > **Phase 4.1 — `Story`/`StoryView` ACTUAL (khác bản plan ở trên):**
 > - `Story` lưu **media phẳng trên row** (`mediaUrl`, `mediaObjectKey`, `mediaType`, `thumbnailUrl?`, `thumbnailObjectKey?`, `duration?`, `width?`, `height?`) — 1 story = 1 media, KHÔNG child-table. Thêm `mediaObjectKey`/`thumbnailObjectKey` cho S3 cleanup (parity PostMedia).
 > - **KHÔNG cột `visibility`** — privacy ở user-level (private account + non-follower → ẩn). **KHÔNG** `audioTrackId`/`audioTrack`/`items` relation — `StoryItem` + `AudioTrack` defer 4.3/4.4, nên Story 4.1 chỉ có `author` + `views`.
@@ -472,6 +478,16 @@ DELETE /messages/:id/reactions        # 5.3a — remove own reaction (idempotent
 GET    /giphy/search                   # ?q=&type=gif|stickers&limit= (auth required)
 GET    /giphy/trending                 # ?type=gif|stickers&limit= (auth required)
 
+# Notifications (Phase 7 — LIKE/COMMENT/FOLLOW only; 1h dedupe + self-skip)
+GET    /notifications                  # newest-first, cursor → { notifications, nextCursor }
+GET    /notifications/unread-count      # nav badge → { count }
+PATCH  /notifications/read-all          # → { count }
+PATCH  /notifications/:id/read          # scoped by recipient, idempotent → { ok }
+GET    /conversations/unread-total      # total unread messages across conversations → { total }
+
+# Search (Phase 7 — Postgres full-text, prefix to_tsquery + GIN)
+GET    /search                          # ?q=&type=posts|users|all&limit=&offset= (optionalAuth) → { posts, users }
+
 # Media upload (Phase 2)
 POST   /media/presign
 
@@ -514,8 +530,8 @@ POST   /calls/:id/end                  # body { action: 'leave'|'end_for_all', r
 'presence:online'        { userId }                 // → partner user rooms (D2: contact-scoped)
 'presence:offline'       { userId, lastSeenAt }     // → partner user rooms (5s offline debounce)
 
-// ── Deferred ──
-'notification:new'       { notification }           // Phase 7
+// ── Notifications (Phase 7) ──
+'notification:new'       { notification }           // → recipient's user room (LIKE/COMMENT/FOLLOW; FE prepend list + bump badge + OS notif)
 
 // ── Calls — Phase 6 (LiveKit Cloud; NO offer/answer/ice — LiveKit handles all WebRTC signaling) ──
 // Server → Client only (3 thin notifications, fan out to user rooms like message:new):
@@ -611,7 +627,7 @@ POST   /calls/:id/end                  # body { action: 'leave'|'end_for_all', r
 | 5.3-5.4 Messaging | 11-12 | Reactions + GROUP read receipts (5.3) · media image/video + voice + emoji/sticker/GIF + post-share (5.4) | ✅ Done |
 | 5.5 Messaging | 12 | Recall (soft-delete tombstone, sender ≤15min, S3 soft-fail, socket message:deleted) + group create UI (GET /users/groupable recent+mutual merge); reply-to + group member management → BACKLOG | ✅ Done → **Phase 5 complete** |
 | 6. Calls | 13-14 | Audio + video calls (1-1 + group) via LiveKit Cloud SFU. Call-as-Message + 4 REST endpoints + 3 socket events (call:incoming/declined/ended). Webhook + screen-share → backlog | ✅ Done |
-| 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |
+| 7. Polish | 15-16 | Notifications (LIKE/COMMENT/FOLLOW + 1h dedupe + `notification:new`) + unread badges + Postgres full-text search (tsvector + GIN) + default avatar (DiceBear). Hide bài / block / MENTION+STORY_VIEW notif / push → backlog | ✅ Done → **project 7/7 complete** |
 
 ---
 

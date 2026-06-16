@@ -150,6 +150,12 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | POST | `/calls/:id/token` | ✓ | join/accept → 200 `{token, url}`; non-participant→**403**, ended→**410**, ≥50 participants→**409 CallFull** (Phase 6) |
 | POST | `/calls/:id/decline` | ✓ | recipient decline — DIRECT: end DECLINED + emit `call:ended`+`call:declined`; GROUP: chỉ emit `call:declined` (room mở) → 200 CALL message (Phase 6) |
 | POST | `/calls/:id/end` | ✓ | body `{action:'leave'\|'end_for_all', reason?}` — DIRECT leave=end; GROUP leave auto-end khi room ≤1 (listParticipants); `end_for_all` initiator-only (non-initiator GROUP→**403**) → 200 CALL message (Phase 6) |
+| GET | `/conversations/unread-total` | ✓ | grand-total unread messages across viewer's conversations (single `$queryRaw`, `COUNT(*)::int`, COALESCE('-infinity') null-cursor) → `{ total }` (Phase 7). `GET /conversations` cũng thêm `unreadCount` per item (per-page `$queryRaw` map) |
+| GET | `/notifications` | ✓ | viewer's notifications newest-first, cursor → `{ notifications, nextCursor }` (LIKE/COMMENT/FOLLOW only) (Phase 7) |
+| GET | `/notifications/unread-count` | ✓ | unread notification count (nav badge) → `{ count }` (Phase 7) |
+| PATCH | `/notifications/read-all` | ✓ | mark all read → `{ count }` (Phase 7) |
+| PATCH | `/notifications/:id/read` | ✓ | mark one read (scoped by recipient, idempotent no-op) → `{ ok }` (Phase 7) |
+| GET | `/search` | optional | full-text search `?q=&type=posts\|users\|all&limit=&offset=`; prefix `to_tsquery` (`token:*`) over GENERATED tsvector + GIN; posts respect visibility (PUBLIC/own/FOLLOWERS-if-following), users no privacy filter → `{ posts, users }` (Phase 7) |
 
 Khi thêm endpoint mới, update bảng trên.
 

@@ -70,4 +70,7 @@ export const queryKeys = {
 
   // Full-text search (GET /search), keyed by query + type (Phase 7).
   search: (q: string, type: string) => ['search', type, q] as const,
+
+  // Music track search for Music Stories (GET /music/search), keyed by query.
+  musicSearch: (q: string) => ['music', 'search', q] as const,
 };

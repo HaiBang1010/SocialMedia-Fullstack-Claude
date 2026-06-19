@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Eye, Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { Eye, Trash2, Volume1, Volume2, VolumeX, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Avatar from '@/components/common/Avatar';
 import Spinner from '@/components/common/Spinner';
@@ -16,6 +16,10 @@ import { useViewStory } from '@/features/stories/hooks/useViewStory';
 import { useDeleteStory } from '@/features/stories/hooks/useDeleteStory';
 import { useStoryGestures } from '@/hooks/useStoryGestures';
 import { formatRelativeTime } from '@/lib/format';
+import type { StoryItem } from '@/types/api';
+
+const STORY_MUTED_KEY = 'beng-story-muted';
+const STORY_VOLUME_KEY = 'beng-story-volume';
 
 // Full-screen story viewer — a single instance mounted in AppLayout, driven by
 // storyViewerStore. Hand-rolled fixed overlay (not Radix Dialog) so gestures
@@ -59,12 +63,59 @@ export default function StoryViewer() {
   const [currentUserIndex, setCurrentUserIndex] = useState(-1);
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
   const [isUnseenFlow, setIsUnseenFlow] = useState(false);
-  const [muted, setMuted] = useState(false);
+  // Default muted (autoplay-safe + IG behavior: tap to unmute). Persisted so the choice
+  // sticks across stories/sessions; applies to both video and music stories.
+  const [muted, setMuted] = useState(() => {
+    if (typeof localStorage === 'undefined') return true;
+    return localStorage.getItem(STORY_MUTED_KEY) !== 'false';
+  });
+  // Playback volume 0-1 (separate from muted, HTML5-audio native). Persisted; default 0.5.
+  const [volume, setVolume] = useState(() => {
+    if (typeof localStorage === 'undefined') return 0.5;
+    const v = Number.parseFloat(localStorage.getItem(STORY_VOLUME_KEY) ?? '');
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5;
+  });
   const [isViewersModalOpen, setIsViewersModalOpen] = useState(false);
   const initializedRef = useRef(false);
   const modalOpenRef = useRef(false);
   modalOpenRef.current = isViewersModalOpen;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const toggleMuted = useCallback(() => {
+    setMuted((m) => {
+      const next = !m;
+      try {
+        localStorage.setItem(STORY_MUTED_KEY, String(next));
+      } catch {
+        /* private mode / quota — non-fatal */
+      }
+      return next;
+    });
+  }, []);
+
+  // Slider drag → set + persist volume. Dragging up while muted auto-unmutes so the change
+  // is audible; dragging to 0 leaves the mute state alone (still silent either way).
+  const changeVolume = useCallback((v: number) => {
+    const next = Math.min(1, Math.max(0, v));
+    setVolume(next);
+    try {
+      localStorage.setItem(STORY_VOLUME_KEY, String(next));
+    } catch {
+      /* non-fatal */
+    }
+    if (next > 0) {
+      setMuted((m) => {
+        if (!m) return m;
+        try {
+          localStorage.setItem(STORY_MUTED_KEY, 'false');
+        } catch {
+          /* non-fatal */
+        }
+        return false;
+      });
+    }
+  }, []);
 
   // Archive queue = all loaded pages flattened (newest-first).
   const archivedStories = useMemo(
@@ -82,6 +133,15 @@ export default function StoryViewer() {
   const currentStory = stories?.[currentStoryIndex];
   const isLoading =
     mode === 'feed' ? feedLoading : mode === 'single-user' ? singleLoading : archiveLoading;
+
+  // Music Story overlay (image story + a MUSIC item). Drives the <audio> element + mute UI.
+  const musicItem = useMemo(
+    () =>
+      currentStory?.items?.find(
+        (it): it is Extract<StoryItem, { type: 'MUSIC' }> => it.type === 'MUSIC',
+      ),
+    [currentStory],
+  );
 
   // Cross-user advance is FEED-only; single-user / archive view one user's set and close.
   const canCrossUserAdvance = mode === 'feed' && isUnseenFlow;
@@ -243,15 +303,44 @@ export default function StoryViewer() {
   }, [isOpen, currentStory?.id, currentStory?.mediaType, isPaused]);
 
   // React only sets the `muted` attribute on mount, not on updates — sync the DOM
-  // property so the toggle (and a freshly mounted video) honor the preference.
+  // muted + volume properties so the toggle/slider (and a freshly mounted element) honor them.
   useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = muted;
-  }, [muted, currentStory?.id]);
+    if (videoRef.current) {
+      videoRef.current.muted = muted;
+      videoRef.current.volume = volume;
+    }
+    if (audioRef.current) {
+      audioRef.current.muted = muted;
+      audioRef.current.volume = volume;
+    }
+  }, [muted, volume, currentStory?.id]);
+
+  // Music Story audio — start each clip at startMs when the story changes (not on
+  // pause/resume, so a hold-to-pause resumes in place like the progress bar + video).
+  useEffect(() => {
+    const a = audioRef.current;
+    if (a && musicItem) a.currentTime = musicItem.payload.startMs / 1000;
+  }, [isOpen, currentStory?.id, musicItem]);
+
+  // Play/pause the clip in lock-step with the progress bar (paused on hold / viewers modal).
+  // Mirrors the video effect; autoplay-block is silent (muted-by-default plays regardless).
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a || !musicItem) return;
+    if (isPaused) {
+      a.pause();
+      return;
+    }
+    a.play().catch(() => undefined);
+  }, [isOpen, currentStory?.id, isPaused, musicItem]);
 
   if (!isOpen) return null;
 
   // Archive is always the viewer's own stories → owner. Otherwise compare author id.
   const isOwner = mode === 'archive' || (!!me && !!currentStory && me.id === currentStory.authorId);
+
+  // Volume icon cascade: muted/0 → X, low → 1 wave, normal → 2 waves.
+  const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   const handleDelete = () => {
     if (!currentStory || !stories) return;
@@ -348,6 +437,25 @@ export default function StoryViewer() {
                 />
               )}
 
+              {/* Music Story audio (invisible). Keyed per story → clean remount; the effects
+                  above start it at startMs + play/pause with the timeline. */}
+              {musicItem && (
+                <audio
+                  key={currentStory.id}
+                  ref={audioRef}
+                  src={musicItem.payload.previewUrl}
+                  onTimeUpdate={(e) => {
+                    const a = e.currentTarget;
+                    if (
+                      a.currentTime * 1000 >=
+                      musicItem.payload.startMs + musicItem.payload.clipMs
+                    ) {
+                      a.pause();
+                    }
+                  }}
+                />
+              )}
+
               {/* Overlays (read-only). pointer-events-none → taps fall through to gestures.
                   Empty / absent items render nothing (4.1/4.2 stories). */}
               <StoryOverlayLayer items={currentStory.items} />
@@ -367,16 +475,35 @@ export default function StoryViewer() {
                 </button>
               )}
 
-              {/* Mute toggle (video only). */}
-              {currentStory.mediaType === 'VIDEO' && (
-                <button
-                  type="button"
-                  aria-label={muted ? 'Unmute' : 'Mute'}
-                  onClick={() => setMuted((m) => !m)}
-                  className="absolute right-3 bottom-3 z-30 grid size-9 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
-                >
-                  {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
-                </button>
+              {/* Volume control (video OR music story). Icon = tap-to-mute (both desktop +
+                  mobile). Desktop (hover-capable, fine pointer) also reveals a vertical slider
+                  on hover; on touch the slider is hidden (device volume buttons handle it). */}
+              {(currentStory.mediaType === 'VIDEO' || musicItem) && (
+                <div className="group absolute right-3 bottom-3 z-30 flex flex-col items-center pt-2">
+                  {/* Vertical slider popover — desktop hover only. No margin gap: the wrapper's
+                      pt-2 is a transparent, HOVERABLE bridge between icon and slider so moving
+                      the cursor up keeps group-hover (slider sits flush at the wrapper top). */}
+                  <div className="pointer-events-none absolute bottom-full hidden flex-col items-center rounded-full bg-black/55 px-2 py-3 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:flex">
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={muted ? 0 : volume}
+                      onChange={(e) => changeVolume(Number(e.target.value))}
+                      aria-label="Volume"
+                      className="h-24 cursor-pointer accent-primary [direction:rtl] [writing-mode:vertical-lr]"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={muted ? 'Unmute' : 'Mute'}
+                    onClick={toggleMuted}
+                    className="grid size-9 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+                  >
+                    <VolumeIcon className="size-5" />
+                  </button>
+                </div>
               )}
 
               {/* Gesture layer: hold-pause / swipe-down / tap-nav. Above media + overlays
@@ -386,8 +513,22 @@ export default function StoryViewer() {
               <div className="absolute inset-0 z-10 touch-none" {...gestures.handlers} />
             </div>
 
-            {/* BOTTOM chrome — reply-input placeholder (h-20, mirrored by the editor). */}
-            <div className="h-20 shrink-0" />
+            {/* BOTTOM chrome — reply-input placeholder (h-20, mirrored by the editor).
+                Music Story → a "now playing" pill. */}
+            <div className="flex h-20 shrink-0 items-center justify-center px-4">
+              {musicItem && (
+                <div className="flex max-w-[80%] items-center gap-2 rounded-full bg-black/45 px-3 py-1.5 text-white">
+                  <img
+                    src={musicItem.payload.albumArt}
+                    alt=""
+                    className="size-6 shrink-0 rounded object-cover"
+                  />
+                  <span className="truncate text-xs">
+                    {musicItem.payload.title} · {musicItem.payload.artist}
+                  </span>
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

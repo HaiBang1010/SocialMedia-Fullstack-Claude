@@ -100,7 +100,7 @@ export default function StoryBar() {
           onClick={openComposer}
           className="flex shrink-0 flex-col items-center justify-around gap-1.5"
         >
-          <span className=" relative rounded-full p-[2px] bg-muted">
+          <span className="relative inline-flex rounded-full p-[2px] bg-muted">
             {me ? (
               <Avatar user={me} size="lg" className="size-16 ring-2 ring-border" />
             ) : (

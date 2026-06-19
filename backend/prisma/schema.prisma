@@ -180,7 +180,7 @@ model StoryItem {
   y        Float
   scale    Float         @default(1) // 4.3a always 1 (multi-touch scale → 4.3b)
   rotation Float         @default(0) // 4.3a always 0 (rotate → 4.3b)
-  payload  Json // TEXT: { text }  EMOJI: { emoji }
+  payload  Json // TEXT: { text }  EMOJI: { emoji }  MUSIC: { trackId, previewUrl, title, artist, albumArt, startMs, clipMs }
 
   story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
@@ -193,6 +193,7 @@ enum StoryItemType {
   MENTION // Phase 4.3b
   STICKER // Phase 4.3b
   TAG // Phase 4.3b
+  MUSIC // Music Story — draggable iTunes-preview sticker; payload carries track + trim
 }
 
 model StoryView {

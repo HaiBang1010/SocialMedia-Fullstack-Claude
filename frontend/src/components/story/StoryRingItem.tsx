@@ -19,13 +19,13 @@ export default function StoryRingItem({ user, hasUnseen, onClick }: StoryRingIte
     >
       <span
         className={cn(
-          'rounded-full p-[2px]',
+          'inline-flex rounded-full p-[2px]',
           hasUnseen
             ? 'bg-gradient-to-tr from-primary to-[oklch(0.7_0.17_80)]'
             : 'bg-muted',
         )}
       >
-        <span className="block rounded-full bg-background p-[2px]">
+        <span className="inline-flex rounded-full bg-background p-[2px]">
           <Avatar user={user} size="lg" className="size-16" />
         </span>
       </span>

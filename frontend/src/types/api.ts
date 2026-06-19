@@ -149,8 +149,8 @@ export interface CommentListResponse {
 
 // Draggable layers on a story. x/y are 0-1 normalized against the story content zone;
 // scale/rotation are persisted but always 1/0 in 4.3a (multi-touch lands in 4.3b). The
-// backend enum also carries MENTION/STICKER/TAG, but only TEXT + EMOJI render in 4.3a.
-export type StoryItemType = 'TEXT' | 'EMOJI';
+// backend enum also carries MENTION/STICKER/TAG, but only TEXT + EMOJI + MUSIC render.
+export type StoryItemType = 'TEXT' | 'EMOJI' | 'MUSIC';
 
 interface StoryItemBase {
   x: number;
@@ -159,14 +159,43 @@ interface StoryItemBase {
   rotation: number;
 }
 
+// Music Story sticker payload — the chosen iTunes track + the trim window. clipMs is the
+// single source of truth for the story's duration (StoryProgressBars reads it; the backend
+// does NOT set Story.duration). startMs..startMs+clipMs is the slice of the 30s preview.
+export interface MusicPayload {
+  trackId: string;
+  previewUrl: string;
+  title: string;
+  artist: string;
+  albumArt: string;
+  startMs: number;
+  clipMs: number;
+}
+
 export type StoryItem =
   | (StoryItemBase & { id: string; type: 'TEXT'; payload: { text: string } })
-  | (StoryItemBase & { id: string; type: 'EMOJI'; payload: { emoji: string } });
+  | (StoryItemBase & { id: string; type: 'EMOJI'; payload: { emoji: string } })
+  | (StoryItemBase & { id: string; type: 'MUSIC'; payload: MusicPayload });
 
 // Frontend-built overlay before upload — no id (the DB assigns it on create).
 export type StoryItemInput =
   | (StoryItemBase & { type: 'TEXT'; payload: { text: string } })
-  | (StoryItemBase & { type: 'EMOJI'; payload: { emoji: string } });
+  | (StoryItemBase & { type: 'EMOJI'; payload: { emoji: string } })
+  | (StoryItemBase & { type: 'MUSIC'; payload: MusicPayload });
+
+// GET /music/search → one track result (mirrors backend musicTrackSchema).
+export interface MusicTrack {
+  id: string;
+  title: string;
+  artist: string;
+  albumArt: string; // 512x512
+  previewUrl: string; // 30s m4a/AAC preview
+  durationMs: number; // full track length (display only)
+}
+
+export interface MusicSearchResponse {
+  items: MusicTrack[];
+}
 
 // ── Stories (Phase 4.1) ────────────────────────────────────────────────
 

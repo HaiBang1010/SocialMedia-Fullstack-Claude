@@ -19,6 +19,7 @@ import conversationsRoutes from "./modules/conversations/conversations.routes";
 import messagesRoutes from "./modules/messages/messages.routes";
 import callsRoutes from "./modules/calls/calls.routes";
 import giphyRoutes from "./modules/giphy/giphy.routes";
+import musicRoutes from "./modules/music/music.routes";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
 import searchRoutes from "./modules/search/search.routes";
 import { startArchiveJob } from "./jobs/archiveExpiredStories";
@@ -76,6 +77,7 @@ app.use("/conversations", conversationsRoutes);
 app.use("/messages", messagesRoutes);
 app.use("/calls", callsRoutes);
 app.use("/giphy", giphyRoutes);
+app.use("/music", musicRoutes);
 app.use("/notifications", notificationsRoutes);
 app.use("/search", searchRoutes);
 

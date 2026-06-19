@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import MusicSticker from '@/components/music/MusicSticker';
 import type { StoryItem } from '@/types/api';
 
 interface StoryOverlayProps {
@@ -58,6 +59,8 @@ export default function StoryOverlay({
         >
           {item.payload.text}
         </span>
+      ) : item.type === 'MUSIC' ? (
+        <MusicSticker payload={item.payload} selected={isSelected} />
       ) : (
         <span
           className={cn(

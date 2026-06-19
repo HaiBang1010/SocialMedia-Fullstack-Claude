@@ -25,9 +25,29 @@ const emojiItemInputSchema = z.object({
   payload: z.object({ emoji: z.string().min(1).max(8) }),
 });
 
+// Music Story — a draggable music sticker. payload carries the chosen iTunes track plus the
+// trim window (startMs..startMs+clipMs over the 30s preview). clipMs is the single source of
+// truth for the story's duration (the viewer's progress bar reads it; backend does NOT touch
+// Story.duration). Cross-field bound (startMs + clipMs <= 30000) is enforced in createStorySchema
+// below — discriminatedUnion members must be plain ZodObjects (no .refine wrapper here).
+const musicItemInputSchema = z.object({
+  type: z.literal('MUSIC'),
+  ...overlayBaseShape,
+  payload: z.object({
+    trackId: z.string().min(1),
+    previewUrl: z.string().url(),
+    title: z.string().min(1).max(200),
+    artist: z.string().min(1).max(200),
+    albumArt: z.string().url(),
+    startMs: z.number().int().min(0).max(29000),
+    clipMs: z.number().int().min(5000).max(30000),
+  }),
+});
+
 export const storyItemInputSchema = z.discriminatedUnion('type', [
   textItemInputSchema,
   emojiItemInputSchema,
+  musicItemInputSchema,
 ]);
 
 // Response shape for one persisted overlay (adds the DB-assigned id). payload kept loose
@@ -70,7 +90,29 @@ export const createStorySchema = z
     (data) =>
       data.mediaType !== 'VIDEO' || (!!data.thumbnailUrl && !!data.thumbnailObjectKey),
     { message: 'A video story requires a thumbnail' },
-  );
+  )
+  // Music Story constraints: at most ONE music item per story, and the trim window must fit
+  // inside the 30s preview. (Per-field bounds live in musicItemInputSchema; this is the
+  // cross-field + cardinality guard.)
+  .superRefine((data, ctx) => {
+    const music = data.items.filter((i) => i.type === 'MUSIC');
+    if (music.length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['items'],
+        message: 'A story can have at most one music item',
+      });
+    }
+    for (const [idx, item] of data.items.entries()) {
+      if (item.type === 'MUSIC' && item.payload.startMs + item.payload.clipMs > 30000) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['items', idx, 'payload', 'clipMs'],
+          message: 'Trim window must fit within the 30s preview (startMs + clipMs <= 30000)',
+        });
+      }
+    }
+  });
 
 // ── Response shapes (cho OpenAPI doc) ──
 // author dùng đúng các field của publicUserSelect (loại email/passwordHash).

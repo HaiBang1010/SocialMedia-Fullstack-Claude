@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Type, Smile, X } from 'lucide-react';
+import { Type, Smile, Music, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StoryOverlay from './StoryOverlay';
 import TrashZone from './TrashZone';
 import AddTextOverlay from './AddTextOverlay';
 import EmojiPickerOverlay from './EmojiPickerOverlay';
+import MusicPicker from '@/components/music/MusicPicker';
+import MusicTrimmer from '@/components/music/MusicTrimmer';
 import { useOverlayDrag } from '@/hooks/useOverlayDrag';
 import type { StoryMediaPayload } from '@/features/stories/hooks/useCreateStory';
-import type { StoryItem, StoryItemInput } from '@/types/api';
+import type { MusicPayload, MusicTrack, StoryItem, StoryItemInput } from '@/types/api';
 
 interface StoryEditStageProps {
   media: StoryMediaPayload; // cropped 9:16 image OR a video (+ its poster) as the background
@@ -35,6 +37,8 @@ export default function StoryEditStage({ media, onBack, onClose, onComplete }: S
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAddText, setShowAddText] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [showMusicPicker, setShowMusicPicker] = useState(false);
+  const [pickedTrack, setPickedTrack] = useState<MusicTrack | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -84,16 +88,37 @@ export default function StoryEditStage({ media, onBack, onClose, onComplete }: S
     setShowEmoji(false);
   };
 
-  const handleShare = () => {
-    // Strip the temp id back to StoryItemInput (explicit return type keeps the literal
-    // 'TEXT'/'EMOJI' discriminants instead of widening to string).
-    const payload = items.map((it): StoryItemInput =>
-      it.type === 'TEXT'
-        ? { type: 'TEXT', x: it.x, y: it.y, scale: it.scale, rotation: it.rotation, payload: it.payload }
-        : { type: 'EMOJI', x: it.x, y: it.y, scale: it.scale, rotation: it.rotation, payload: it.payload },
-    );
-    onComplete(payload);
+  // Music sticker is added center, like text/emoji. clipMs (in the payload) becomes the story's
+  // duration in the viewer. Backend caps at one MUSIC item/story; the toolbar button guards too.
+  const addMusic = (payload: MusicPayload) => {
+    const id = nextTempId();
+    setItems((prev) => [
+      ...prev,
+      { id, type: 'MUSIC', x: 0.5, y: 0.5, scale: 1, rotation: 0, payload },
+    ]);
+    setSelectedId(id);
+    setPickedTrack(null);
+    setShowMusicPicker(false);
   };
+
+  const handleShare = () => {
+    // Strip the temp id back to StoryItemInput. Explicit per-type branches keep the literal
+    // discriminant + narrowed payload (a generic spread would widen the union).
+    const toInput = (it: StoryItem): StoryItemInput => {
+      const base = { x: it.x, y: it.y, scale: it.scale, rotation: it.rotation };
+      switch (it.type) {
+        case 'TEXT':
+          return { type: 'TEXT', ...base, payload: it.payload };
+        case 'EMOJI':
+          return { type: 'EMOJI', ...base, payload: it.payload };
+        case 'MUSIC':
+          return { type: 'MUSIC', ...base, payload: it.payload };
+      }
+    };
+    onComplete(items.map(toInput));
+  };
+
+  const hasMusic = items.some((it) => it.type === 'MUSIC');
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-md flex-col bg-black">
@@ -163,6 +188,14 @@ export default function StoryEditStage({ media, onBack, onClose, onComplete }: S
           <Button variant="outline" className="gap-2" onClick={() => setShowEmoji(true)}>
             <Smile className="size-4" /> Emoji
           </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={hasMusic}
+            onClick={() => setShowMusicPicker(true)}
+          >
+            <Music className="size-4" /> Music
+          </Button>
         </div>
         {items.length > SOFT_LIMIT && (
           <span className="text-[11px] text-amber-400">
@@ -176,6 +209,12 @@ export default function StoryEditStage({ media, onBack, onClose, onComplete }: S
       )}
       {showEmoji && (
         <EmojiPickerOverlay onCommit={addEmoji} onCancel={() => setShowEmoji(false)} />
+      )}
+      {showMusicPicker && !pickedTrack && (
+        <MusicPicker onSelect={setPickedTrack} onCancel={() => setShowMusicPicker(false)} />
+      )}
+      {pickedTrack && (
+        <MusicTrimmer track={pickedTrack} onConfirm={addMusic} onCancel={() => setPickedTrack(null)} />
       )}
     </div>
   );
